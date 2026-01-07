@@ -147,7 +147,12 @@ func (m Modal) View() string {
 			content.WriteString(line + "\n")
 		}
 		content.WriteString("\n")
-		content.WriteString(HelpDescStyle.Render("j/k: navigate  enter: select  esc: cancel"))
+		// Show number keys hint for Priority modal
+		if m.Title == "Priority" {
+			content.WriteString(HelpDescStyle.Render("0-4: select  j/k: navigate  enter: select  esc: cancel"))
+		} else {
+			content.WriteString(HelpDescStyle.Render("j/k: navigate  enter: select  esc: cancel"))
+		}
 	}
 
 	// Apply border and return (centering is handled by the caller)

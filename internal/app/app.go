@@ -516,6 +516,10 @@ func (m *Model) handleFormKeys(msg tea.KeyMsg) tea.Cmd {
 	case key.Matches(msg, m.keys.Tab):
 		m.formFocus = (m.formFocus + 1) % 4
 		m.updateFormFocus()
+
+	case key.Matches(msg, m.keys.ShiftTab):
+		m.formFocus = (m.formFocus - 1 + 4) % 4
+		m.updateFormFocus()
 	}
 
 	return nil
@@ -571,6 +575,14 @@ func (m *Model) handleSelectModalKeys(msg tea.KeyMsg) tea.Cmd {
 		m.modal.MoveDown()
 	case "k", "up":
 		m.modal.MoveUp()
+	case "0", "1", "2", "3", "4":
+		// Number keys for priority modal - directly select and apply
+		if m.mode == ViewEditPriority && m.selected != nil {
+			taskID := m.selected.ID
+			value := msg.String()
+			m.mode = ViewList
+			return m.applyModalSelection(taskID, value)
+		}
 	case "enter":
 		if m.selected != nil {
 			value := m.modal.SelectedValue()
@@ -1163,7 +1175,7 @@ func (m Model) viewForm() string {
 
 	// Help
 	b.WriteString("\n")
-	b.WriteString(ui.HelpBarStyle.Render("tab: next field  enter: submit  esc: cancel"))
+	b.WriteString(ui.HelpBarStyle.Render("tab/shift+tab: next/prev field  enter: submit  esc: cancel"))
 
 	return b.String()
 }
