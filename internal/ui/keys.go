@@ -39,6 +39,7 @@ type KeyMap struct {
 	Cancel    key.Binding
 	Submit    key.Binding
 	Tab       key.Binding
+	ShiftTab  key.Binding
 	PrevView  key.Binding
 	NextView  key.Binding
 }
@@ -78,8 +79,8 @@ func DefaultKeyMap() KeyMap {
 			key.WithHelp("enter", "details"),
 		),
 		Add: key.NewBinding(
-			key.WithKeys("a"),
-			key.WithHelp("a", "add"),
+			key.WithKeys("a", "c"),
+			key.WithHelp("a/c", "add"),
 		),
 		Edit: key.NewBinding(
 			key.WithKeys("e"),
@@ -158,6 +159,10 @@ func DefaultKeyMap() KeyMap {
 		Tab: key.NewBinding(
 			key.WithKeys("tab"),
 			key.WithHelp("tab", "next field"),
+		),
+		ShiftTab: key.NewBinding(
+			key.WithKeys("shift+tab"),
+			key.WithHelp("shift+tab", "prev field"),
 		),
 		PrevView: key.NewBinding(
 			key.WithKeys("h", "left"),
