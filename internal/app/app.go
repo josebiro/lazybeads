@@ -558,32 +558,44 @@ func (m *Model) submitForm() tea.Cmd {
 }
 
 func (m *Model) updateSizes() {
-	// Reserve space for title and help
-	contentHeight := m.height - 4
+	// Reserve space for title bar (1 line) and help bar (1 line) + margins
+	contentHeight := m.height - 3
 	if contentHeight < 0 {
 		contentHeight = 0
 	}
 
-	// Calculate panel heights (divide into thirds)
+	// Calculate panel heights - distribute evenly with remainder going to first panels
 	panelHeight := contentHeight / 3
+	remainder := contentHeight % 3
 	if panelHeight < 4 {
 		panelHeight = 4
+	}
+
+	// Give extra height to first panels to fill the space
+	inProgressHeight := panelHeight
+	openHeight := panelHeight
+	closedHeight := panelHeight
+	if remainder >= 1 {
+		inProgressHeight++
+	}
+	if remainder >= 2 {
+		openHeight++
 	}
 
 	// Wide mode: panels on left, detail on right
 	if m.width >= 80 {
 		panelWidth := m.width/2 - 1
-		m.inProgressPanel.SetSize(panelWidth, panelHeight)
-		m.openPanel.SetSize(panelWidth, panelHeight)
-		m.closedPanel.SetSize(panelWidth, panelHeight)
+		m.inProgressPanel.SetSize(panelWidth, inProgressHeight)
+		m.openPanel.SetSize(panelWidth, openHeight)
+		m.closedPanel.SetSize(panelWidth, closedHeight)
 		m.detail.Width = m.width/2 - 4
 		m.detail.Height = contentHeight - 2
 	} else {
 		// Narrow mode: full width panels stacked
 		panelWidth := m.width - 2
-		m.inProgressPanel.SetSize(panelWidth, panelHeight)
-		m.openPanel.SetSize(panelWidth, panelHeight)
-		m.closedPanel.SetSize(panelWidth, panelHeight)
+		m.inProgressPanel.SetSize(panelWidth, inProgressHeight)
+		m.openPanel.SetSize(panelWidth, openHeight)
+		m.closedPanel.SetSize(panelWidth, closedHeight)
 		m.detail.Width = m.width - 4
 		m.detail.Height = contentHeight - 2
 	}

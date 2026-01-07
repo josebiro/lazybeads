@@ -55,6 +55,22 @@ func (d panelDelegate) Render(w io.Writer, m list.Model, index int, item list.It
 		width = 40
 	}
 
+	// Calculate available width for title (account for icon, priority, spaces)
+	prefixWidth := lipgloss.Width(fmt.Sprintf(" %s %s ", icon, priority))
+	maxTitleWidth := width - prefixWidth
+	if maxTitleWidth < 5 {
+		maxTitleWidth = 5
+	}
+
+	// Truncate title if too long
+	if lipgloss.Width(title) > maxTitleWidth {
+		// Truncate with ellipsis
+		for lipgloss.Width(title+"...") > maxTitleWidth && len(title) > 0 {
+			title = title[:len(title)-1]
+		}
+		title = title + "..."
+	}
+
 	if isSelected {
 		line := fmt.Sprintf(" %s %s %s", icon, priority, title)
 		style := lipgloss.NewStyle().
@@ -71,7 +87,9 @@ func (d panelDelegate) Render(w io.Writer, m list.Model, index int, item list.It
 			iconStyle.Render(icon),
 			priorityStyle.Render(priority),
 			title)
-		fmt.Fprint(w, line)
+		// Ensure line doesn't exceed width
+		style := lipgloss.NewStyle().Width(width).MaxWidth(width)
+		fmt.Fprint(w, style.Render(line))
 	}
 }
 
@@ -108,14 +126,15 @@ func (p *PanelModel) SetTasks(tasks []models.Task) {
 func (p *PanelModel) SetSize(width, height int) {
 	p.width = width
 	p.height = height
-	// Account for border (2 top/bottom) and side padding (4 for │ + space on each side)
-	contentHeight := height - 4 // top border + bottom border + some padding
-	if contentHeight < 1 {
-		contentHeight = 1
-	}
-	contentWidth := width - 6 // side borders + padding
+	// Content area: panel width minus borders and padding (│ + space on each side = 4)
+	contentWidth := width - 4
 	if contentWidth < 10 {
 		contentWidth = 10
+	}
+	// Content height: panel height minus top and bottom borders (2 lines)
+	contentHeight := height - 2
+	if contentHeight < 1 {
+		contentHeight = 1
 	}
 	p.list.SetSize(contentWidth, contentHeight)
 }
@@ -150,6 +169,12 @@ func (p PanelModel) TaskCount() int {
 // Update handles messages for the panel
 func (p PanelModel) Update(msg tea.Msg) (PanelModel, tea.Cmd) {
 	if !p.focused {
+		return p, nil
+	}
+
+	// Don't pass key messages to list - we handle navigation in HandleKey
+	// This prevents double-processing of j/k which causes cursor to skip items
+	if _, isKey := msg.(tea.KeyMsg); isKey {
 		return p, nil
 	}
 
@@ -195,8 +220,9 @@ func (p *PanelModel) HandleKey(msg tea.KeyMsg, keys ui.KeyMap) bool {
 
 // View renders the panel with title embedded in the top border
 func (p PanelModel) View() string {
-	width := p.width - 2
-	height := p.height - 2
+	// Use the full allocated width/height
+	width := p.width
+	height := p.height
 	if width < 10 {
 		width = 10
 	}
@@ -220,27 +246,29 @@ func (p PanelModel) View() string {
 	// Build title with count
 	titleText := fmt.Sprintf(" %s (%d) ", p.title, len(p.tasks))
 
-	// Truncate title if too long
-	maxTitleLen := width - 4 // Leave room for corners and some border
-	if len(titleText) > maxTitleLen {
-		if maxTitleLen > 3 {
-			titleText = titleText[:maxTitleLen-3] + "..."
-		} else {
-			titleText = ""
+	// Truncate title if too long (use lipgloss.Width for proper display width)
+	maxTitleLen := width - 6 // Leave room for corners (╭─ and ─╮) and some border
+	if lipgloss.Width(titleText) > maxTitleLen {
+		// Truncate with ellipsis
+		for lipgloss.Width(titleText) > maxTitleLen-3 && len(titleText) > 0 {
+			titleText = titleText[:len(titleText)-1]
 		}
+		titleText = titleText + "..."
 	}
 
 	// Build top border: ╭─ Title ─────────╮
-	remainingWidth := width - len(titleText) - 2 // -2 for corners
+	// Use lipgloss.Width for proper character width calculation
+	titleDisplayWidth := lipgloss.Width(titleText)
+	remainingWidth := width - titleDisplayWidth - 4 // -4 for "╭─" and "─╮"
 	if remainingWidth < 0 {
 		remainingWidth = 0
 	}
 	topBorder := borderStyle.Render("╭─") +
 		titleStyle.Render(titleText) +
-		borderStyle.Render(strings.Repeat("─", remainingWidth) + "╮")
+		borderStyle.Render(strings.Repeat("─", remainingWidth)+"─╮")
 
 	// Build content area
-	contentWidth := width - 2 // -2 for side borders
+	contentWidth := width - 4 // -4 for side borders and padding (│ + space on each side)
 	if contentWidth < 1 {
 		contentWidth = 1
 	}
@@ -263,7 +291,7 @@ func (p PanelModel) View() string {
 		contentLines = strings.Split(listView, "\n")
 	}
 
-	// Pad or truncate content lines to fit
+	// Pad or truncate content lines to fit the full height
 	var middleRows []string
 	for i := 0; i < contentHeight; i++ {
 		var line string
@@ -276,8 +304,11 @@ func (p PanelModel) View() string {
 		lineWidth := lipgloss.Width(line)
 		if lineWidth < contentWidth {
 			line = line + strings.Repeat(" ", contentWidth-lineWidth)
+		} else if lineWidth > contentWidth {
+			// Truncate if too long
+			line = lipgloss.NewStyle().Width(contentWidth).MaxWidth(contentWidth).Render(line)
 		}
-		// Add side borders
+		// Add side borders with single space padding
 		row := borderStyle.Render("│") + " " + line + " " + borderStyle.Render("│")
 		middleRows = append(middleRows, row)
 	}
