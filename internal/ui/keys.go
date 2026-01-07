@@ -15,7 +15,6 @@ type KeyMap struct {
 	// Actions
 	Select  key.Binding
 	Add     key.Binding
-	Edit    key.Binding
 	Delete  key.Binding
 	Refresh key.Binding
 
@@ -82,10 +81,6 @@ func DefaultKeyMap() KeyMap {
 			key.WithKeys("a", "c"),
 			key.WithHelp("a/c", "add"),
 		),
-		Edit: key.NewBinding(
-			key.WithKeys("e"),
-			key.WithHelp("e", "edit"),
-		),
 		Delete: key.NewBinding(
 			key.WithKeys("x"),
 			key.WithHelp("x", "delete"),
@@ -113,8 +108,8 @@ func DefaultKeyMap() KeyMap {
 			key.WithHelp("y", "edit type"),
 		),
 		EditDescription: key.NewBinding(
-			key.WithKeys("d"),
-			key.WithHelp("d", "edit description"),
+			key.WithKeys("d", "e"),
+			key.WithHelp("d/e", "edit description"),
 		),
 
 		// Filtering
@@ -181,7 +176,6 @@ func (k KeyMap) ShortHelp() []key.Binding {
 		k.Up,
 		k.Select,
 		k.Add,
-		k.Edit,
 		k.Delete,
 		k.Filter,
 		k.Help,
@@ -193,7 +187,7 @@ func (k KeyMap) ShortHelp() []key.Binding {
 func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Top, k.Bottom, k.PageUp, k.PageDown},
-		{k.Select, k.Add, k.Edit, k.Delete, k.Refresh},
+		{k.Select, k.Add, k.Delete, k.Refresh},
 		{k.Filter, k.Ready, k.Open, k.All},
 		{k.Help, k.Quit, k.Cancel},
 	}

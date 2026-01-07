@@ -140,7 +140,6 @@ Panels (h/l to cycle focus)
 Actions
   enter       View task details
   a           Add new task
-  e           Edit all fields (form)
   x           Delete selected task
   R           Refresh list
 
@@ -149,7 +148,7 @@ Field Editing
   s           Edit status (modal)
   p           Edit priority (modal)
   y           Edit type (modal)
-  d           Edit description ($EDITOR)
+  d/e         Edit description ($EDITOR)
 
 General
   ?           Toggle this help

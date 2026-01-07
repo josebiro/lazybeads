@@ -72,18 +72,6 @@ func (m *Model) handleListKeys(msg tea.KeyMsg) tea.Cmd {
 		m.mode = ViewForm
 		m.formTitle.Focus()
 
-	case key.Matches(msg, m.keys.Edit):
-		if task := m.getSelectedTask(); task != nil {
-			m.editing = true
-			m.editingID = task.ID
-			m.formTitle.SetValue(task.Title)
-			m.formDesc.SetValue(task.Description)
-			m.formPriority = task.Priority
-			m.formType = task.Type
-			m.mode = ViewForm
-			m.formTitle.Focus()
-		}
-
 	case key.Matches(msg, m.keys.Delete):
 		if task := m.getSelectedTask(); task != nil {
 			m.confirmMsg = fmt.Sprintf("Delete task %s?", task.ID)
