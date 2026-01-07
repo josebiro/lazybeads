@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 	"time"
 
@@ -102,8 +103,8 @@ type Model struct {
 	confirmMsg    string
 	confirmAction func() tea.Cmd
 
-	// Modal state
-	modal ui.Modal
+	// Inline bar state (replaces modal)
+	inlineBar ui.InlineBar
 }
 
 // New creates a new application model
@@ -330,9 +331,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ViewForm:
 		cmds = append(cmds, m.updateForm(msg))
 	case ViewEditTitle:
-		// Update text input in modal
+		// Update text input in inline bar
 		var cmd tea.Cmd
-		m.modal.Input, cmd = m.modal.Input.Update(msg)
+		m.inlineBar.Input, cmd = m.inlineBar.Input.Update(msg)
 		cmds = append(cmds, cmd)
 	}
 
@@ -352,13 +353,13 @@ func (m *Model) handleKeyPress(msg tea.KeyMsg) tea.Cmd {
 	case ViewConfirm:
 		return m.handleConfirmKeys(msg)
 	case ViewEditTitle:
-		return m.handleTitleModalKeys(msg)
+		return m.handleTitleBarKeys(msg)
 	case ViewEditStatus:
-		return m.handleSelectModalKeys(msg)
+		return m.handleSelectBarKeys(msg)
 	case ViewEditPriority:
-		return m.handleSelectModalKeys(msg)
+		return m.handleSelectBarKeys(msg)
 	case ViewEditType:
-		return m.handleSelectModalKeys(msg)
+		return m.handleSelectBarKeys(msg)
 	}
 	return nil
 }
@@ -436,48 +437,44 @@ func (m *Model) handleListKeys(msg tea.KeyMsg) tea.Cmd {
 
 	case key.Matches(msg, m.keys.EditTitle):
 		if task := m.getSelectedTask(); task != nil {
-			m.modal = ui.NewInputModal("Edit Title", task.Title, 50)
-			m.modal.Subtitle = task.ID
+			m.inlineBar = ui.NewInlineBarInput("Title", task.ID, task.Title, m.width)
 			m.mode = ViewEditTitle
 		}
 
 	case key.Matches(msg, m.keys.EditStatus):
 		if task := m.getSelectedTask(); task != nil {
-			options := []ui.SelectOption{
-				{Label: "open", Value: "open"},
-				{Label: "in_progress", Value: "in_progress"},
-				{Label: "closed", Value: "closed"},
+			options := []ui.InlineBarOption{
+				{Label: "open", Value: "open", Shortcut: "o"},
+				{Label: "in_progress", Value: "in_progress", Shortcut: "i"},
+				{Label: "closed", Value: "closed", Shortcut: "c"},
 			}
-			m.modal = ui.NewSelectModal("Status", options, task.Status, 30)
-			m.modal.Subtitle = task.ID
+			m.inlineBar = ui.NewInlineBarSelect("Status", task.ID, options, task.Status)
 			m.mode = ViewEditStatus
 		}
 
 	case key.Matches(msg, m.keys.EditPriority):
 		if task := m.getSelectedTask(); task != nil {
-			options := []ui.SelectOption{
-				{Label: "P0 (critical)", Value: "0"},
-				{Label: "P1 (high)", Value: "1"},
-				{Label: "P2 (medium)", Value: "2"},
-				{Label: "P3 (low)", Value: "3"},
-				{Label: "P4 (backlog)", Value: "4"},
+			options := []ui.InlineBarOption{
+				{Label: "P0", Value: "0", Shortcut: "0"},
+				{Label: "P1", Value: "1", Shortcut: "1"},
+				{Label: "P2", Value: "2", Shortcut: "2"},
+				{Label: "P3", Value: "3", Shortcut: "3"},
+				{Label: "P4", Value: "4", Shortcut: "4"},
 			}
-			m.modal = ui.NewSelectModal("Priority", options, fmt.Sprintf("%d", task.Priority), 30)
-			m.modal.Subtitle = task.ID
+			m.inlineBar = ui.NewInlineBarSelect("Priority", task.ID, options, fmt.Sprintf("%d", task.Priority))
 			m.mode = ViewEditPriority
 		}
 
 	case key.Matches(msg, m.keys.EditType):
 		if task := m.getSelectedTask(); task != nil {
-			options := []ui.SelectOption{
-				{Label: "task", Value: "task"},
-				{Label: "bug", Value: "bug"},
-				{Label: "feature", Value: "feature"},
-				{Label: "epic", Value: "epic"},
-				{Label: "chore", Value: "chore"},
+			options := []ui.InlineBarOption{
+				{Label: "task", Value: "task", Shortcut: "t"},
+				{Label: "bug", Value: "bug", Shortcut: "b"},
+				{Label: "feature", Value: "feature", Shortcut: "f"},
+				{Label: "epic", Value: "epic", Shortcut: "e"},
+				{Label: "chore", Value: "chore", Shortcut: "r"},
 			}
-			m.modal = ui.NewSelectModal("Type", options, task.Type, 30)
-			m.modal.Subtitle = task.ID
+			m.inlineBar = ui.NewInlineBarSelect("Type", task.ID, options, task.Type)
 			m.mode = ViewEditType
 		}
 
@@ -546,11 +543,11 @@ func (m *Model) handleConfirmKeys(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
-func (m *Model) handleTitleModalKeys(msg tea.KeyMsg) tea.Cmd {
+func (m *Model) handleTitleBarKeys(msg tea.KeyMsg) tea.Cmd {
 	switch msg.String() {
 	case "enter":
 		if m.selected != nil {
-			newTitle := strings.TrimSpace(m.modal.InputValue())
+			newTitle := strings.TrimSpace(m.inlineBar.InputValue())
 			if newTitle != "" {
 				taskID := m.selected.ID
 				m.mode = ViewList
@@ -569,26 +566,31 @@ func (m *Model) handleTitleModalKeys(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
-func (m *Model) handleSelectModalKeys(msg tea.KeyMsg) tea.Cmd {
-	switch msg.String() {
-	case "j", "down":
-		m.modal.MoveDown()
-	case "k", "up":
-		m.modal.MoveUp()
-	case "0", "1", "2", "3", "4":
-		// Number keys for priority modal - directly select and apply
-		if m.mode == ViewEditPriority && m.selected != nil {
+func (m *Model) handleSelectBarKeys(msg tea.KeyMsg) tea.Cmd {
+	key := msg.String()
+
+	// Check for shortcut keys first
+	if m.inlineBar.SelectByShortcut(key) {
+		// Shortcut matched, apply immediately
+		if m.selected != nil {
+			value := m.inlineBar.SelectedValue()
 			taskID := m.selected.ID
-			value := msg.String()
 			m.mode = ViewList
-			return m.applyModalSelection(taskID, value)
+			return m.applyInlineBarSelection(taskID, value)
 		}
+	}
+
+	switch key {
+	case "h", "left":
+		m.inlineBar.MoveLeft()
+	case "l", "right":
+		m.inlineBar.MoveRight()
 	case "enter":
 		if m.selected != nil {
-			value := m.modal.SelectedValue()
+			value := m.inlineBar.SelectedValue()
 			taskID := m.selected.ID
 			m.mode = ViewList
-			return m.applyModalSelection(taskID, value)
+			return m.applyInlineBarSelection(taskID, value)
 		}
 		m.mode = ViewList
 	case "esc":
@@ -597,9 +599,9 @@ func (m *Model) handleSelectModalKeys(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
-func (m *Model) applyModalSelection(taskID, value string) tea.Cmd {
-	// Determine what field to update based on modal title
-	switch m.modal.Title {
+func (m *Model) applyInlineBarSelection(taskID, value string) tea.Cmd {
+	// Determine what field to update based on inline bar title
+	switch m.inlineBar.Title {
 	case "Status":
 		return func() tea.Msg {
 			err := m.client.Update(taskID, beads.UpdateOptions{
@@ -841,6 +843,23 @@ func (m *Model) distributeTasks() {
 			closed = append(closed, t)
 		}
 	}
+
+	// Sort closed tasks by ClosedAt (most recently closed first)
+	sort.Slice(closed, func(i, j int) bool {
+		// Tasks with ClosedAt come before those without
+		if closed[i].ClosedAt == nil && closed[j].ClosedAt == nil {
+			return false
+		}
+		if closed[i].ClosedAt == nil {
+			return false
+		}
+		if closed[j].ClosedAt == nil {
+			return true
+		}
+		// Most recently closed first (descending order)
+		return closed[i].ClosedAt.After(*closed[j].ClosedAt)
+	})
+
 	m.inProgressPanel.SetTasks(inProgress)
 	m.openPanel.SetTasks(open)
 	m.closedPanel.SetTasks(closed)
@@ -1021,7 +1040,7 @@ func (m Model) View() string {
 		}
 		return m.viewMain()
 	case ViewEditTitle, ViewEditStatus, ViewEditPriority, ViewEditType:
-		return m.viewModal()
+		return m.viewMainWithInlineBar()
 	default:
 		return m.viewMain()
 	}
@@ -1233,17 +1252,61 @@ func (m Model) viewConfirm() string {
 	return b.String()
 }
 
-func (m Model) viewModal() string {
-	// Render the modal centered on screen
-	modal := m.modal.View()
+func (m Model) viewMainWithInlineBar() string {
+	var b strings.Builder
 
-	return lipgloss.Place(
-		m.width,
-		m.height,
-		lipgloss.Center,
-		lipgloss.Center,
-		modal,
+	// Title bar
+	title := ui.TitleStyle.Render("lazybeads")
+	focusInfo := m.focusPanelString()
+	titleLine := lipgloss.JoinHorizontal(
+		lipgloss.Left,
+		title,
+		strings.Repeat(" ", max(0, m.width-lipgloss.Width(title)-lipgloss.Width(focusInfo)-2)),
+		ui.HelpDescStyle.Render(focusInfo),
 	)
+	b.WriteString(titleLine + "\n")
+
+	// Content area (same as viewMain but with one less line for the taller inline bar)
+	contentHeight := m.height - 4
+
+	// Stack visible panels vertically
+	var panelViews []string
+	if m.isInProgressVisible() {
+		panelViews = append(panelViews, m.inProgressPanel.View())
+	}
+	panelViews = append(panelViews, m.openPanel.View())
+	panelViews = append(panelViews, m.closedPanel.View())
+	leftColumn := lipgloss.JoinVertical(lipgloss.Left, panelViews...)
+
+	if m.width >= 80 {
+		// Wide mode: panels on left, detail on right
+		detailStyle := ui.PanelStyle
+
+		detailContent := ""
+		if m.selected != nil {
+			m.updateDetailContent()
+			detailContent = m.detail.View()
+		} else {
+			detailContent = ui.HelpDescStyle.Render("Select a task to view details")
+		}
+
+		detailPanel := detailStyle.
+			Width(m.width/2 - 2).
+			Height(contentHeight).
+			Render(detailContent)
+
+		b.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, leftColumn, detailPanel))
+	} else {
+		// Narrow mode: panels only
+		b.WriteString(leftColumn)
+	}
+
+	b.WriteString("\n")
+
+	// Inline bar instead of help bar
+	b.WriteString(m.inlineBar.View(m.width))
+
+	return b.String()
 }
 
 func (m Model) focusPanelString() string {
