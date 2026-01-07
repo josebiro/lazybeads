@@ -1,0 +1,14 @@
+# bv (beads viewer) local config and caches
+.bv/
+
+# Binary
+lazybeads
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
