@@ -117,12 +117,19 @@ func (b InlineBar) InputValue() string {
 func (b InlineBar) View(width int) string {
 	var content strings.Builder
 
+	// Colors for light background bar (vim/tmux inspired)
+	barBg := lipgloss.Color("7")    // White/light background
+	darkText := lipgloss.Color("0") // Black text
+	accentText := lipgloss.Color("4") // Blue for accents
+
 	// Title and subtitle
 	titleStyle := lipgloss.NewStyle().
-		Foreground(ColorPrimary).
+		Foreground(accentText).
+		Background(barBg).
 		Bold(true)
 	subtitleStyle := lipgloss.NewStyle().
-		Foreground(ColorMuted).
+		Foreground(darkText).
+		Background(barBg).
 		Italic(true)
 
 	content.WriteString(titleStyle.Render(b.Title))
@@ -135,10 +142,14 @@ func (b InlineBar) View(width int) string {
 	if b.Type == InlineBarInput {
 		// Text input
 		inputStyle := lipgloss.NewStyle().
-			Foreground(ColorWhite)
+			Foreground(darkText).
+			Background(barBg)
 		content.WriteString(inputStyle.Render(b.Input.View()))
 		content.WriteString("  ")
-		content.WriteString(HelpDescStyle.Render("enter:save esc:cancel"))
+		helpStyle := lipgloss.NewStyle().
+			Foreground(darkText).
+			Background(barBg)
+		content.WriteString(helpStyle.Render("enter:save esc:cancel"))
 	} else {
 		// Horizontal select options
 		for i, opt := range b.Options {
@@ -151,25 +162,30 @@ func (b InlineBar) View(width int) string {
 
 			if i == b.Selected {
 				style := lipgloss.NewStyle().
-					Foreground(ColorPrimary).
+					Foreground(barBg).
+					Background(accentText).
 					Bold(true).
-					Reverse(true).
 					Padding(0, 1)
 				content.WriteString(style.Render(optText))
 			} else {
 				style := lipgloss.NewStyle().
-					Foreground(ColorWhite).
+					Foreground(darkText).
+					Background(barBg).
 					Padding(0, 1)
 				content.WriteString(style.Render(optText))
 			}
 		}
 		content.WriteString("  ")
-		content.WriteString(HelpDescStyle.Render("h/l:nav enter:select esc:cancel"))
+		helpStyle := lipgloss.NewStyle().
+			Foreground(darkText).
+			Background(barBg)
+		content.WriteString(helpStyle.Render("h/l:nav enter:select esc:cancel"))
 	}
 
-	// Render with background style
+	// Render with light background style
 	barStyle := lipgloss.NewStyle().
-		Background(lipgloss.Color("0")).
+		Background(barBg).
+		Foreground(darkText).
 		Width(width).
 		Padding(0, 1)
 
