@@ -149,7 +149,8 @@ Field Editing
   t           Edit title (modal)
   s           Edit status (modal)
   p           Edit priority (modal)
-  y           Edit type (modal)
+  T           Edit type (modal)
+  y           Copy issue ID to clipboard
   d/e         Edit description ($EDITOR)
 
 General
@@ -197,7 +198,8 @@ func (m Model) renderHelpBar() string {
 		{"h/l", "panel"},
 		{"/", "filter"},
 		{"enter", "detail"},
-		{"t/s/p/y/d", "edit"},
+		{"t/s/p/T/d", "edit"},
+		{"y", "copy"},
 		{"x", "delete"},
 		{"?", "help"},
 		{"q", "quit"},
