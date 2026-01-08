@@ -43,6 +43,12 @@ type editorFinishedMsg struct {
 	err     error
 }
 
+// clipboardCopiedMsg is sent when text is copied to clipboard
+type clipboardCopiedMsg struct {
+	text string
+	err  error
+}
+
 // tickMsg triggers periodic refresh
 type tickMsg time.Time
 

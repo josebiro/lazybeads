@@ -28,7 +28,7 @@ func (m Model) View() string {
 			return m.viewDetailOverlay()
 		}
 		return m.viewMain()
-	case ViewEditTitle, ViewEditStatus, ViewEditPriority, ViewEditType:
+	case ViewEditTitle, ViewEditStatus, ViewEditPriority, ViewEditType, ViewFilter:
 		return m.viewMainWithInlineBar()
 	default:
 		return m.viewMain()
@@ -40,11 +40,19 @@ func (m Model) viewMain() string {
 
 	// Title bar
 	title := ui.TitleStyle.Render("lazybeads")
+	// Show filter indicator if filter is active
+	filterIndicator := ""
+	if m.filterQuery != "" {
+		filterIndicator = ui.HelpKeyStyle.Render(" [filter: ") +
+			ui.HelpDescStyle.Render(m.filterQuery) +
+			ui.HelpKeyStyle.Render("]")
+	}
 	focusInfo := m.focusPanelString()
 	titleLine := lipgloss.JoinHorizontal(
 		lipgloss.Left,
 		title,
-		strings.Repeat(" ", max(0, m.width-lipgloss.Width(title)-lipgloss.Width(focusInfo)-2)),
+		filterIndicator,
+		strings.Repeat(" ", max(0, m.width-lipgloss.Width(title)-lipgloss.Width(filterIndicator)-lipgloss.Width(focusInfo)-2)),
 		ui.HelpDescStyle.Render(focusInfo),
 	)
 	b.WriteString(titleLine + "\n")
@@ -137,6 +145,11 @@ Panels (h/l to cycle focus)
   Open        Tasks with status "open"
   Closed      Tasks with status "closed"
 
+Filtering
+  /           Open filter bar (searches title/ID)
+  enter       Apply filter
+  esc         Clear filter
+
 Actions
   enter       View task details
   a           Add new task
@@ -178,11 +191,19 @@ func (m Model) viewMainWithInlineBar() string {
 
 	// Title bar
 	title := ui.TitleStyle.Render("lazybeads")
+	// Show filter indicator if filter is active (but not when editing filter)
+	filterIndicator := ""
+	if m.filterQuery != "" && m.mode != ViewFilter {
+		filterIndicator = ui.HelpKeyStyle.Render(" [filter: ") +
+			ui.HelpDescStyle.Render(m.filterQuery) +
+			ui.HelpKeyStyle.Render("]")
+	}
 	focusInfo := m.focusPanelString()
 	titleLine := lipgloss.JoinHorizontal(
 		lipgloss.Left,
 		title,
-		strings.Repeat(" ", max(0, m.width-lipgloss.Width(title)-lipgloss.Width(focusInfo)-2)),
+		filterIndicator,
+		strings.Repeat(" ", max(0, m.width-lipgloss.Width(title)-lipgloss.Width(filterIndicator)-lipgloss.Width(focusInfo)-2)),
 		ui.HelpDescStyle.Render(focusInfo),
 	)
 	b.WriteString(titleLine + "\n")
@@ -250,6 +271,7 @@ func (m Model) renderHelpBar() string {
 	}{
 		{"j/k", "nav"},
 		{"h/l", "panel"},
+		{"/", "filter"},
 		{"enter", "detail"},
 		{"t/s/p/y/d", "edit"},
 		{"x", "delete"},

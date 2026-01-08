@@ -24,6 +24,7 @@ type KeyMap struct {
 	EditPriority    key.Binding
 	EditType        key.Binding
 	EditDescription key.Binding
+	CopyID          key.Binding
 
 	// Filtering
 	Filter     key.Binding
@@ -104,8 +105,12 @@ func DefaultKeyMap() KeyMap {
 			key.WithHelp("p", "edit priority"),
 		),
 		EditType: key.NewBinding(
+			key.WithKeys("T"),
+			key.WithHelp("T", "edit type"),
+		),
+		CopyID: key.NewBinding(
 			key.WithKeys("y"),
-			key.WithHelp("y", "edit type"),
+			key.WithHelp("y", "copy id"),
 		),
 		EditDescription: key.NewBinding(
 			key.WithKeys("d", "e"),

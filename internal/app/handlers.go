@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -34,6 +35,8 @@ func (m *Model) handleKeyPress(msg tea.KeyMsg) tea.Cmd {
 		return m.handleSelectBarKeys(msg)
 	case ViewEditType:
 		return m.handleSelectBarKeys(msg)
+	case ViewFilter:
+		return m.handleFilterKeys(msg)
 	}
 	return nil
 }
@@ -143,6 +146,20 @@ func (m *Model) handleListKeys(msg tea.KeyMsg) tea.Cmd {
 	case key.Matches(msg, m.keys.EditDescription):
 		if task := m.getSelectedTask(); task != nil {
 			return m.editDescriptionInEditor(task)
+		}
+
+	case key.Matches(msg, m.keys.Filter):
+		// Enter filter mode with an inline bar
+		m.inlineBar = ui.NewInlineBarInput("Filter", "", m.filterQuery, m.width)
+		m.mode = ViewFilter
+
+	case key.Matches(msg, m.keys.CopyID):
+		if task := m.getSelectedTask(); task != nil {
+			taskID := task.ID
+			return func() tea.Msg {
+				err := clipboard.WriteAll(taskID)
+				return clipboardCopiedMsg{text: taskID, err: err}
+			}
 		}
 	}
 
@@ -287,6 +304,22 @@ func (m *Model) applyInlineBarSelection(taskID, value string) tea.Cmd {
 			})
 			return taskUpdatedMsg{err: err}
 		}
+	}
+	return nil
+}
+
+func (m *Model) handleFilterKeys(msg tea.KeyMsg) tea.Cmd {
+	switch msg.String() {
+	case "enter":
+		// Apply filter and return to list
+		m.filterQuery = strings.TrimSpace(m.inlineBar.InputValue())
+		m.distributeTasks()
+		m.mode = ViewList
+	case "esc":
+		// Clear filter and return to list
+		m.filterQuery = ""
+		m.distributeTasks()
+		m.mode = ViewList
 	}
 	return nil
 }

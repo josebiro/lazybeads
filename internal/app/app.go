@@ -2,6 +2,7 @@ package app
 
 import (
 	"sort"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -26,6 +27,7 @@ const (
 	ViewEditStatus
 	ViewEditPriority
 	ViewEditType
+	ViewFilter
 )
 
 // PanelFocus represents which panel is focused
@@ -96,6 +98,9 @@ type Model struct {
 
 	// Inline bar state (replaces modal)
 	inlineBar ui.InlineBar
+
+	// Filter state
+	filterQuery string
 }
 
 // New creates a new application model
@@ -245,6 +250,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tickMsg:
 		// Periodic refresh - reload tasks and schedule next tick
 		cmds = append(cmds, m.loadTasks(), pollTick())
+
+	case clipboardCopiedMsg:
+		if msg.err != nil {
+			m.err = msg.err
+		}
+		// Could show a brief "Copied!" message, but for now just silently succeed
 	}
 
 	// Update child components
@@ -271,6 +282,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, m.updateForm(msg))
 	case ViewEditTitle:
 		// Update text input in inline bar
+		var cmd tea.Cmd
+		m.inlineBar.Input, cmd = m.inlineBar.Input.Update(msg)
+		cmds = append(cmds, cmd)
+	case ViewFilter:
+		// Update text input in inline bar for filter
 		var cmd tea.Cmd
 		m.inlineBar.Input, cmd = m.inlineBar.Input.Update(msg)
 		cmds = append(cmds, cmd)
@@ -347,7 +363,16 @@ func (m *Model) updateSizes() {
 
 func (m *Model) distributeTasks() {
 	var inProgress, open, closed []models.Task
+	filterLower := strings.ToLower(m.filterQuery)
 	for _, t := range m.tasks {
+		// Apply filter if set
+		if filterLower != "" {
+			titleLower := strings.ToLower(t.Title)
+			idLower := strings.ToLower(t.ID)
+			if !strings.Contains(titleLower, filterLower) && !strings.Contains(idLower, filterLower) {
+				continue
+			}
+		}
 		switch t.Status {
 		case "in_progress":
 			inProgress = append(inProgress, t)
