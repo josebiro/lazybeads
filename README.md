@@ -4,6 +4,9 @@ A terminal user interface for managing [beads](https://github.com/anthropics/bea
 
 Navigate, create, and manage your project issues without leaving the terminal.
 
+<img width="2550" height="1362" alt="CleanShot 2026-01-07 at 18 17 53@2x" src="https://github.com/user-attachments/assets/2b6fdc40-4595-41f3-9a73-e3eb9de00cfc" />
+
+
 ## Features
 
 - **Three-panel layout** - See In Progress, Open, and Closed issues at a glance
