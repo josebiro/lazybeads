@@ -152,7 +152,7 @@ func New() Model {
 		formTitle:       formTitle,
 		formDesc:        formDesc,
 		formPriority:    2,
-		formType:        "task",
+		formType:        "feature",
 	}
 }
 
@@ -312,8 +312,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) updateSizes() {
-	// Reserve space for title bar (1 line) and help bar (1 line) + margins
-	contentHeight := m.height - 3
+	// Reserve space for help bar (1 line) + margins
+	contentHeight := m.height - 2
 	if contentHeight < 0 {
 		contentHeight = 0
 	}

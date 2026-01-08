@@ -63,7 +63,7 @@ func (m *Model) resetForm() {
 	m.formTitle.SetValue("")
 	m.formDesc.SetValue("")
 	m.formPriority = 2
-	m.formType = "task"
+	m.formType = "feature"
 	m.formFocus = 0
 	m.updateFormFocus()
 }
