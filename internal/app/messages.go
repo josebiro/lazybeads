@@ -9,6 +9,7 @@ import (
 )
 
 const pollInterval = 2 * time.Second
+const statusFlashDuration = 1 * time.Second
 
 // tasksLoadedMsg is sent when tasks are loaded
 type tasksLoadedMsg struct {
@@ -48,6 +49,9 @@ type clipboardCopiedMsg struct {
 	text string
 	err  error
 }
+
+// clearStatusMsg clears the status flash message
+type clearStatusMsg struct{}
 
 // tickMsg triggers periodic refresh
 type tickMsg time.Time

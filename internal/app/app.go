@@ -3,6 +3,7 @@ package app
 import (
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -101,6 +102,9 @@ type Model struct {
 
 	// Filter state
 	filterQuery string
+
+	// Status message (flash notification)
+	statusMsg string
 }
 
 // New creates a new application model
@@ -183,7 +187,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.mode = ViewList
 				return m, nil
 			}
-			// In list mode, do nothing
+			// In list mode, clear filter if active
+			if m.filterQuery != "" {
+				m.filterQuery = ""
+				m.distributeTasks()
+				return m, nil
+			}
 			return m, nil
 		}
 
@@ -254,8 +263,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case clipboardCopiedMsg:
 		if msg.err != nil {
 			m.err = msg.err
+		} else {
+			m.statusMsg = "Copied!"
+			cmds = append(cmds, tea.Tick(statusFlashDuration, func(t time.Time) tea.Msg {
+				return clearStatusMsg{}
+			}))
 		}
-		// Could show a brief "Copied!" message, but for now just silently succeed
+
+	case clearStatusMsg:
+		m.statusMsg = ""
 	}
 
 	// Update child components

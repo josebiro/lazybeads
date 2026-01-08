@@ -280,6 +280,12 @@ func (m Model) renderHelpBar() string {
 	}
 
 	var parts []string
+
+	// Show status message if present
+	if m.statusMsg != "" {
+		parts = append(parts, ui.SuccessStyle.Render(m.statusMsg))
+	}
+
 	for _, k := range keys {
 		part := ui.HelpKeyStyle.Render(k.key) + ":" + ui.HelpDescStyle.Render(k.desc)
 		parts = append(parts, part)
