@@ -250,12 +250,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		prevMode := m.mode
+		prevSearchMode := m.searchMode
 		cmd := m.handleKeyPress(msg)
 		if cmd != nil {
 			cmds = append(cmds, cmd)
 		}
-		// If mode changed, don't pass key to child components
-		if m.mode != prevMode {
+		// If mode changed or search mode was just activated, don't pass key to child components
+		if m.mode != prevMode || (m.searchMode && !prevSearchMode) {
 			return m, tea.Batch(cmds...)
 		}
 
