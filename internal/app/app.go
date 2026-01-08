@@ -83,8 +83,9 @@ type Model struct {
 	closedPanel     PanelModel
 
 	// Components
-	detail     viewport.Model
-	filterText textinput.Model
+	detail       viewport.Model
+	helpViewport viewport.Model
+	filterText   textinput.Model
 
 	// Form state
 	formTitle    textinput.Model
@@ -130,6 +131,9 @@ func New() Model {
 	// Initialize detail viewport
 	vp := viewport.New(0, 0)
 
+	// Initialize help viewport
+	helpVp := viewport.New(0, 0)
+
 	// Initialize filter input (legacy - can be removed)
 	filter := textinput.New()
 	filter.Placeholder = "Search tasks..."
@@ -173,6 +177,7 @@ func New() Model {
 		openPanel:       openPanel,
 		closedPanel:     closedPanel,
 		detail:          vp,
+		helpViewport:    helpVp,
 		filterText:      filter,
 		searchInput:     searchInput,
 		formTitle:       formTitle,
@@ -364,6 +369,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.modal.Input, cmd = m.modal.Input.Update(msg)
 		cmds = append(cmds, cmd)
+	case ViewHelp:
+		// Update help viewport for scrolling
+		var cmd tea.Cmd
+		m.helpViewport, cmd = m.helpViewport.Update(msg)
+		cmds = append(cmds, cmd)
 	}
 
 	return m, tea.Batch(cmds...)
@@ -469,6 +479,15 @@ func (m *Model) updateSizes() {
 	}
 	m.formTitle.Width = formWidth
 	m.formDesc.Width = formWidth
+
+	// Update help viewport size
+	// Help view: title (2 lines) + content + help bar (1 line)
+	helpHeight := m.height - 4
+	if helpHeight < 5 {
+		helpHeight = 5
+	}
+	m.helpViewport.Width = m.width - 4
+	m.helpViewport.Height = helpHeight
 }
 
 func (m *Model) distributeTasks() {

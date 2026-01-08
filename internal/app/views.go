@@ -110,13 +110,12 @@ func (m Model) viewDetailOverlay() string {
 	return b.String()
 }
 
-func (m Model) viewHelp() string {
+func (m *Model) viewHelp() string {
 	var b strings.Builder
 
 	b.WriteString(ui.TitleStyle.Render("Keyboard Shortcuts") + "\n\n")
 
-	helpContent := `
-Navigation
+	helpContent := `Navigation
   j/k, ↑/↓    Move up/down in focused panel
   g/G         Jump to top/bottom
   ^u/^d       Page up/down
@@ -162,9 +161,21 @@ Auto-refresh: polls every 2 seconds
 		}
 	}
 
-	b.WriteString(ui.OverlayStyle.Render(helpContent))
+	// Set content on the viewport
+	m.helpViewport.SetContent(helpContent)
+
+	// Render viewport inside overlay style
+	viewportContent := ui.OverlayStyle.
+		Width(m.width - 4).
+		Height(m.helpViewport.Height).
+		Render(m.helpViewport.View())
+	b.WriteString(viewportContent)
 	b.WriteString("\n")
-	b.WriteString(ui.HelpBarStyle.Render("Press ? or esc to close"))
+
+	// Build status bar with scroll indicator
+	scrollInfo := fmt.Sprintf("%d%%", int(m.helpViewport.ScrollPercent()*100))
+	helpBar := fmt.Sprintf("j/k:scroll  ^u/^d:page  ?/esc:close  %s", scrollInfo)
+	b.WriteString(ui.HelpBarStyle.Render(helpBar))
 
 	return b.String()
 }
