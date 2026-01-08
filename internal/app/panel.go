@@ -28,6 +28,7 @@ type PanelModel struct {
 // panelDelegate is a custom delegate for rendering task items in panels
 type panelDelegate struct {
 	listWidth int
+	focused   bool
 }
 
 func newPanelDelegate() panelDelegate {
@@ -72,7 +73,8 @@ func (d panelDelegate) Render(w io.Writer, m list.Model, index int, item list.It
 		title = title + "..."
 	}
 
-	if isSelected {
+	if isSelected && d.focused {
+		// Show highlight only when panel is focused
 		line := fmt.Sprintf(" %s %s %s", priority, issueID, title)
 		style := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("15")).
@@ -143,6 +145,8 @@ func (p *PanelModel) SetSize(width, height int) {
 // SetFocus sets whether this panel is focused
 func (p *PanelModel) SetFocus(focused bool) {
 	p.focused = focused
+	// Update delegate so it knows whether to show selection highlight
+	p.list.SetDelegate(panelDelegate{focused: focused})
 }
 
 // IsFocused returns whether this panel is focused
