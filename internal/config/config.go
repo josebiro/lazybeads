@@ -22,7 +22,7 @@ type CustomCommand struct {
 
 // Load reads the configuration from the default location
 func Load() (*Config, error) {
-	configPath := DefaultConfigPath()
+	configPath := ConfigPath()
 
 	// If config file doesn't exist, return empty config
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
@@ -47,6 +47,19 @@ func Load() (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+// ConfigPath returns the config file path to use.
+// It checks in order:
+//  1. LAZYBEADS_CONFIG environment variable (direct path to config file)
+//  2. Default XDG config location (~/.config/lazybeads/config.yml)
+func ConfigPath() string {
+	// First, check for explicit config file path
+	if configFile := os.Getenv("LAZYBEADS_CONFIG"); configFile != "" {
+		return configFile
+	}
+
+	return DefaultConfigPath()
 }
 
 // DefaultConfigPath returns the default config file path
