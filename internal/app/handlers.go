@@ -19,6 +19,11 @@ import (
 )
 
 func (m *Model) handleKeyPress(msg tea.KeyMsg) tea.Cmd {
+	// If in search mode, handle search keys first
+	if m.searchMode {
+		return m.handleSearchKeys(msg)
+	}
+
 	switch m.mode {
 	case ViewList:
 		return m.handleListKeys(msg)
@@ -152,9 +157,11 @@ func (m *Model) handleListKeys(msg tea.KeyMsg) tea.Cmd {
 		}
 
 	case key.Matches(msg, m.keys.Filter):
-		// Enter filter mode with a modal
-		m.modal = ui.NewModalInput("Filter", "", m.filterQuery)
-		m.mode = ViewFilter
+		// Enter inline search mode in status bar
+		m.searchMode = true
+		m.searchInput.SetValue(m.filterQuery)
+		m.searchInput.Focus()
+		return m.searchInput.Focus() // Return blink command
 
 	case key.Matches(msg, m.keys.CopyID):
 		if task := m.getSelectedTask(); task != nil {
@@ -322,6 +329,29 @@ func (m *Model) applyModalSelection(taskID, value string) tea.Cmd {
 	return nil
 }
 
+func (m *Model) handleSearchKeys(msg tea.KeyMsg) tea.Cmd {
+	switch msg.String() {
+	case "enter":
+		// Confirm filter and exit search mode (keep filter active)
+		m.searchMode = false
+		m.searchInput.Blur()
+		m.filterQuery = strings.TrimSpace(m.searchInput.Value())
+		m.distributeTasks()
+		return nil
+	case "backspace":
+		// If input is empty, exit search mode without clearing existing filter
+		if m.searchInput.Value() == "" {
+			m.searchMode = false
+			m.searchInput.Blur()
+			return nil
+		}
+		// Otherwise let the textinput handle backspace normally
+		return nil
+	}
+	// Let the textinput handle all other keys
+	return nil
+}
+
 func (m *Model) handleFilterKeys(msg tea.KeyMsg) tea.Cmd {
 	switch msg.String() {
 	case "enter":
@@ -408,9 +438,24 @@ func (m *Model) executeCustomCommand(cmd config.CustomCommand) tea.Cmd {
 	return nil
 }
 
+// shellEscape escapes a string for safe use in shell commands
+// Escapes single quotes, double quotes, backticks, and dollar signs
+func shellEscape(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	s = strings.ReplaceAll(s, `'`, `'\''`)
+	s = strings.ReplaceAll(s, "`", "\\`")
+	s = strings.ReplaceAll(s, `$`, `\$`)
+	return s
+}
+
 // renderCommandTemplate renders the command template with task data
 func (m *Model) renderCommandTemplate(cmdTemplate string, task *models.Task) (string, error) {
-	tmpl, err := template.New("cmd").Parse(cmdTemplate)
+	funcMap := template.FuncMap{
+		"sh": shellEscape,
+	}
+
+	tmpl, err := template.New("cmd").Funcs(funcMap).Parse(cmdTemplate)
 	if err != nil {
 		return "", err
 	}

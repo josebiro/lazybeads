@@ -127,9 +127,11 @@ Panels (h/l to cycle focus)
   Closed      Tasks with status "closed"
 
 Filtering
-  /           Open filter bar (searches title/ID)
-  enter       Apply filter
-  esc         Clear filter
+  /           Start inline search in status bar
+  (typing)    Filter updates live as you type
+  enter       Confirm filter and return to navigation
+  esc         Clear filter and return to navigation
+  backspace   On empty input, exit search mode
 
 Actions
   enter       View task details
@@ -189,8 +191,36 @@ func (m Model) renderStatusBar() string {
 		parts = append(parts, ui.SuccessStyle.Render(m.statusMsg))
 	}
 
-	// When filter is active, show search results instead of key bindings
-	if m.filterQuery != "" {
+	// When in search mode, show the search input
+	if m.searchMode {
+		// Search input with cursor
+		searchPart := ui.HelpKeyStyle.Render("/: ") + m.searchInput.View()
+		parts = append(parts, searchPart)
+
+		// Live result counts
+		inProgressCount := m.inProgressPanel.TaskCount()
+		openCount := m.openPanel.TaskCount()
+		closedCount := m.closedPanel.TaskCount()
+		total := inProgressCount + openCount + closedCount
+
+		resultsPart := ui.HelpDescStyle.Render(fmt.Sprintf("(%d results", total))
+		if inProgressCount > 0 {
+			resultsPart += ui.StatusStyle("in_progress").Render(fmt.Sprintf(": %d in progress", inProgressCount))
+		}
+		if openCount > 0 {
+			resultsPart += ui.StatusStyle("open").Render(fmt.Sprintf(", %d open", openCount))
+		}
+		if closedCount > 0 {
+			resultsPart += ui.HelpDescStyle.Render(fmt.Sprintf(", %d closed", closedCount))
+		}
+		resultsPart += ui.HelpDescStyle.Render(")")
+		parts = append(parts, resultsPart)
+
+		// Minimal key hints during search
+		parts = append(parts, ui.HelpKeyStyle.Render("enter")+":"+ui.HelpDescStyle.Render("confirm"))
+		parts = append(parts, ui.HelpKeyStyle.Render("esc")+":"+ui.HelpDescStyle.Render("clear"))
+	} else if m.filterQuery != "" {
+		// When filter is active (but not in search mode), show search results
 		// Filter indicator
 		filterPart := ui.HelpKeyStyle.Render("/") + ":" +
 			ui.HelpDescStyle.Render(m.filterQuery)
