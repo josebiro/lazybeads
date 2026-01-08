@@ -123,6 +123,7 @@ func New() Model {
 	inProgressPanel.SetFocus(true) // Start with in progress focused
 	openPanel := NewPanel("Open")
 	closedPanel := NewPanel("Closed")
+	closedPanel.SetCollapsed(true) // Start collapsed since not focused
 
 	// Initialize detail viewport
 	vp := viewport.New(0, 0)
@@ -361,13 +362,6 @@ func (m *Model) updateSizes() {
 		joinedHeight = numPanels // Minimum 1 line per panel
 	}
 
-	// Calculate panel heights - distribute evenly with remainder going to first panels
-	panelHeight := joinedHeight / numPanels
-	remainder := joinedHeight % numPanels
-	if panelHeight < 4 {
-		panelHeight = 4
-	}
-
 	// Wide mode: panels on left, detail on right
 	var panelWidth int
 	if m.width >= 80 {
@@ -381,22 +375,58 @@ func (m *Model) updateSizes() {
 		m.detail.Height = contentHeight - 2
 	}
 
+	// Check if Closed panel is collapsed (only when not focused)
+	closedCollapsed := m.closedPanel.IsCollapsed()
+	collapsedHeight := 1 // Collapsed panel takes 1 line
+
+	// Calculate available height for expanded panels
+	availableHeight := joinedHeight
+	numExpandedPanels := numPanels
+	if closedCollapsed {
+		availableHeight -= collapsedHeight
+		numExpandedPanels--
+	}
+	if numExpandedPanels < 1 {
+		numExpandedPanels = 1
+	}
+
+	// Calculate panel heights - distribute evenly with remainder going to first panels
+	panelHeight := availableHeight / numExpandedPanels
+	remainder := availableHeight % numExpandedPanels
+	if panelHeight < 4 {
+		panelHeight = 4
+	}
+
 	// Distribute heights to visible panels
-	panelIndex := 0
+	expandedPanelIndex := 0
 	for _, panel := range visiblePanels {
-		h := panelHeight
-		if panelIndex < remainder {
-			h++
-		}
 		switch panel {
 		case FocusInProgress:
+			h := panelHeight
+			if expandedPanelIndex < remainder {
+				h++
+			}
 			m.inProgressPanel.SetSize(panelWidth, h)
+			expandedPanelIndex++
 		case FocusOpen:
+			h := panelHeight
+			if expandedPanelIndex < remainder {
+				h++
+			}
 			m.openPanel.SetSize(panelWidth, h)
+			expandedPanelIndex++
 		case FocusClosed:
-			m.closedPanel.SetSize(panelWidth, h)
+			if closedCollapsed {
+				m.closedPanel.SetSize(panelWidth, collapsedHeight)
+			} else {
+				h := panelHeight
+				if expandedPanelIndex < remainder {
+					h++
+				}
+				m.closedPanel.SetSize(panelWidth, h)
+				expandedPanelIndex++
+			}
 		}
-		panelIndex++
 	}
 
 	// Set size 0 for hidden panels (In Progress when empty)
@@ -501,6 +531,9 @@ func (m *Model) cyclePanelFocus(direction int) {
 		return
 	}
 
+	// Track if we're leaving the Closed panel
+	wasClosedFocused := m.focusedPanel == FocusClosed
+
 	// Clear focus from current panel
 	switch m.focusedPanel {
 	case FocusInProgress:
@@ -537,6 +570,18 @@ func (m *Model) cyclePanelFocus(direction int) {
 		m.openPanel.SetFocus(true)
 	case FocusClosed:
 		m.closedPanel.SetFocus(true)
+	}
+
+	// Handle Closed panel collapse/expand
+	nowClosedFocused := m.focusedPanel == FocusClosed
+	if wasClosedFocused && !nowClosedFocused {
+		// Leaving Closed panel - collapse it
+		m.closedPanel.SetCollapsed(true)
+		m.updateSizes()
+	} else if !wasClosedFocused && nowClosedFocused {
+		// Entering Closed panel - expand it
+		m.closedPanel.SetCollapsed(false)
+		m.updateSizes()
 	}
 
 	// Update selected task for detail panel

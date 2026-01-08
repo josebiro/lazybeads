@@ -16,13 +16,14 @@ import (
 
 // PanelModel represents a single panel showing a filtered list of tasks
 type PanelModel struct {
-	title    string
-	tasks    []models.Task
-	selected int
-	focused  bool
-	width    int
-	height   int
-	list     list.Model
+	title     string
+	tasks     []models.Task
+	selected  int
+	focused   bool
+	collapsed bool
+	width     int
+	height    int
+	list      list.Model
 }
 
 // panelDelegate is a custom delegate for rendering task items in panels
@@ -154,6 +155,16 @@ func (p PanelModel) IsFocused() bool {
 	return p.focused
 }
 
+// SetCollapsed sets whether this panel is collapsed to a single line
+func (p *PanelModel) SetCollapsed(collapsed bool) {
+	p.collapsed = collapsed
+}
+
+// IsCollapsed returns whether this panel is collapsed
+func (p PanelModel) IsCollapsed() bool {
+	return p.collapsed
+}
+
 // SelectedTask returns the currently selected task, if any
 func (p PanelModel) SelectedTask() *models.Task {
 	if len(p.tasks) == 0 {
@@ -225,6 +236,11 @@ func (p *PanelModel) HandleKey(msg tea.KeyMsg, keys ui.KeyMap) bool {
 
 // View renders the panel with title embedded in the top border
 func (p PanelModel) View() string {
+	// If collapsed, render a single-line view
+	if p.collapsed {
+		return p.viewCollapsed()
+	}
+
 	// Use the full allocated width/height
 	width := p.width
 	height := p.height
@@ -330,4 +346,38 @@ func (p PanelModel) View() string {
 	result.WriteString(bottomBorder)
 
 	return result.String()
+}
+
+// viewCollapsed renders a single-line collapsed view of the panel
+func (p PanelModel) viewCollapsed() string {
+	width := p.width
+	if width < 10 {
+		width = 10
+	}
+
+	// Build title with count: "╶── Closed (5) ───────────────────────────╴"
+	titleText := fmt.Sprintf(" %s (%d) ", p.title, len(p.tasks))
+
+	// Use muted style for collapsed panel
+	borderColor := ui.ColorBorder
+	titleColor := ui.ColorMuted
+	borderStyle := lipgloss.NewStyle().Foreground(borderColor)
+	titleStyle := lipgloss.NewStyle().Foreground(titleColor)
+
+	// Calculate remaining width for the right side dashes
+	// Format: ╶── Title (N) ─────────────────────────╴
+	leftDash := "╶──"
+	rightEnd := "──╴"
+	titleDisplayWidth := lipgloss.Width(titleText)
+	remainingWidth := width - lipgloss.Width(leftDash) - titleDisplayWidth - lipgloss.Width(rightEnd)
+	if remainingWidth < 0 {
+		remainingWidth = 0
+	}
+
+	line := borderStyle.Render(leftDash) +
+		titleStyle.Render(titleText) +
+		borderStyle.Render(strings.Repeat("─", remainingWidth)) +
+		borderStyle.Render(rightEnd)
+
+	return line
 }
