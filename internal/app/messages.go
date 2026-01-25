@@ -5,7 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"lazybeads/internal/models"
+	"github.com/josebiro/lazybeads/internal/models"
 )
 
 const pollInterval = 2 * time.Second
