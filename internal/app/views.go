@@ -6,7 +6,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"lazybeads/internal/ui"
+	"github.com/josebiro/lazybeads/internal/ui"
 )
 
 // View renders the application
