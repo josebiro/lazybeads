@@ -773,10 +773,15 @@ func (m Model) viewBoard() string {
 	// Build header row
 	headerRow := lipgloss.JoinHorizontal(lipgloss.Top, headers...) + "\n"
 
+	// Write title and headers first (always)
+	b.WriteString(titleLine)
+	b.WriteString(headerRow)
+
 	if wideMode {
-		// Wide mode: board on left (2/3), detail panel on right (1/3)
-		detailWidth := m.width/3 - 2
-		detailHeight := m.height - 4
+		// Wide mode: board columns on left (2/3), detail panel on right (1/3)
+		detailWidth := m.width/3 - 4
+		// Detail height should match board columns height
+		detailHeight := colHeight
 
 		detailContent := ""
 		if m.selected != nil {
@@ -791,13 +796,10 @@ func (m Model) viewBoard() string {
 			Height(detailHeight).
 			Render(detailContent)
 
-		// Combine board columns with detail panel
-		leftSide := titleLine + headerRow + boardContent
-		b.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, leftSide, detailPanel))
+		// Join board columns with detail panel horizontally
+		b.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, boardContent, detailPanel))
 	} else {
 		// Narrow mode: board only
-		b.WriteString(titleLine)
-		b.WriteString(headerRow)
 		b.WriteString(boardContent)
 	}
 	b.WriteString("\n")
