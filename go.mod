@@ -1,4 +1,4 @@
-module lazybeads
+module github.com/josebiro/lazybeads
 
 go 1.25.5
 
