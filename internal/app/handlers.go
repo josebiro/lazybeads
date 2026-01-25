@@ -253,13 +253,13 @@ func (m *Model) handleHelpMouse(msg tea.MouseMsg) tea.Cmd {
 
 // handleBoardMouse handles mouse events in the board view
 func (m *Model) handleBoardMouse(msg tea.MouseMsg) tea.Cmd {
-	// Determine if we're in wide mode
-	wideMode := m.width >= 100
+	// Determine if we're in wide mode (must match viewBoard)
+	wideMode := m.width >= 160
 
-	// Calculate board area width
+	// Calculate board area width - give board 2/3 of space in wide mode
 	boardWidth := m.width
 	if wideMode {
-		boardWidth = m.width / 2
+		boardWidth = (m.width * 2) / 3
 	}
 
 	// Column dimensions (must match viewBoard calculations)

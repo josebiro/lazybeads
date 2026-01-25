@@ -566,12 +566,13 @@ func (m Model) viewBoard() string {
 	var b strings.Builder
 
 	// Determine if we're in wide mode (show detail panel on right)
-	wideMode := m.width >= 100 // Need more width for board + detail
+	// Need at least 160 chars wide to show both board and detail comfortably
+	wideMode := m.width >= 160
 
-	// Calculate board area width
+	// Calculate board area width - give board 2/3 of space in wide mode
 	boardWidth := m.width
 	if wideMode {
-		boardWidth = m.width / 2
+		boardWidth = (m.width * 2) / 3
 	}
 
 	// Get tasks for each column
@@ -773,8 +774,8 @@ func (m Model) viewBoard() string {
 	headerRow := lipgloss.JoinHorizontal(lipgloss.Top, headers...) + "\n"
 
 	if wideMode {
-		// Wide mode: board on left, detail panel on right
-		detailWidth := m.width/2 - 2
+		// Wide mode: board on left (2/3), detail panel on right (1/3)
+		detailWidth := m.width/3 - 2
 		detailHeight := m.height - 4
 
 		detailContent := ""
