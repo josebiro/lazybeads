@@ -88,7 +88,8 @@ func pollTick() tea.Cmd {
 func (m Model) loadTasks() tea.Cmd {
 	return func() tea.Msg {
 		// Load all tasks so we can distribute them to the 3 panels
-		tasks, err := m.client.List("--all")
+		// Use --limit=0 to bypass the default 50-task limit
+		tasks, err := m.client.List("--all", "--limit=0")
 		return tasksLoadedMsg{tasks: tasks, err: err}
 	}
 }
