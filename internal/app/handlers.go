@@ -28,6 +28,8 @@ func (m *Model) handleMouseEvent(msg tea.MouseMsg) tea.Cmd {
 		return m.handleDetailMouse(msg)
 	case ViewHelp:
 		return m.handleHelpMouse(msg)
+	case ViewBoard:
+		return m.handleBoardMouse(msg)
 	case ViewEditStatus, ViewEditPriority, ViewEditType:
 		return m.handleModalMouse(msg)
 	}
@@ -246,6 +248,129 @@ func (m *Model) handleHelpMouse(msg tea.MouseMsg) tea.Cmd {
 			m.helpViewport.LineDown(3)
 		}
 	}
+	return nil
+}
+
+// handleBoardMouse handles mouse events in the board view
+func (m *Model) handleBoardMouse(msg tea.MouseMsg) tea.Cmd {
+	// Determine if we're in wide mode
+	wideMode := m.width >= 100
+
+	// Calculate board area width
+	boardWidth := m.width
+	if wideMode {
+		boardWidth = m.width / 2
+	}
+
+	// Column dimensions (must match viewBoard calculations)
+	colWidth := (boardWidth - 8) / 3
+	if colWidth < 15 {
+		colWidth = 15
+	}
+
+	// Header takes 3 lines (title + blank + headers)
+	headerLines := 3
+	// Column content starts after header
+	colTop := headerLines
+
+	switch msg.Action {
+	case tea.MouseActionPress:
+		if msg.Button == tea.MouseButtonLeft {
+			// Check if click is in the board area (left half in wide mode)
+			if wideMode && msg.X >= boardWidth {
+				// Click in detail panel area - could open full detail view
+				if m.selected != nil {
+					m.updateDetailContent()
+					m.mode = ViewDetail
+					return m.loadComments(m.selected.ID)
+				}
+				return nil
+			}
+
+			// Determine which column was clicked
+			clickedColumn := -1
+			if msg.X < colWidth {
+				clickedColumn = 0 // Open
+			} else if msg.X < colWidth*2 {
+				clickedColumn = 1 // In Progress
+			} else if msg.X < colWidth*3 {
+				clickedColumn = 2 // Closed
+			}
+
+			if clickedColumn >= 0 {
+				// Calculate which row was clicked (accounting for header and borders)
+				clickedRow := msg.Y - colTop - 1 // -1 for column border
+
+				// Get task count for clicked column
+				var columnCount int
+				for _, t := range m.tasks {
+					switch clickedColumn {
+					case 0:
+						if t.Status == "open" {
+							columnCount++
+						}
+					case 1:
+						if t.Status == "in_progress" {
+							columnCount++
+						}
+					case 2:
+						if t.Status == "closed" {
+							columnCount++
+						}
+					}
+				}
+
+				// Update selection if valid
+				if clickedRow >= 0 && clickedRow < columnCount {
+					m.boardColumn = clickedColumn
+					m.boardRow = clickedRow
+					m.selected = m.getBoardSelectedTask()
+				} else if clickedRow >= 0 {
+					// Clicked in column but below tasks - just focus the column
+					m.boardColumn = clickedColumn
+					if columnCount > 0 {
+						m.boardRow = columnCount - 1
+					} else {
+						m.boardRow = 0
+					}
+					m.selected = m.getBoardSelectedTask()
+				}
+			}
+		}
+
+	case tea.MouseActionRelease:
+		// Handle scroll wheel in board view
+		if msg.Button == tea.MouseButtonWheelUp {
+			if m.boardRow > 0 {
+				m.boardRow--
+				m.selected = m.getBoardSelectedTask()
+			}
+		} else if msg.Button == tea.MouseButtonWheelDown {
+			// Get count for current column
+			var columnCount int
+			for _, t := range m.tasks {
+				switch m.boardColumn {
+				case 0:
+					if t.Status == "open" {
+						columnCount++
+					}
+				case 1:
+					if t.Status == "in_progress" {
+						columnCount++
+					}
+				case 2:
+					if t.Status == "closed" {
+						columnCount++
+					}
+				}
+			}
+			if m.boardRow < columnCount-1 {
+				m.boardRow++
+				m.selected = m.getBoardSelectedTask()
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -871,6 +996,9 @@ func (m *Model) handleBoardKeys(msg tea.KeyMsg) tea.Cmd {
 		return 0
 	}
 
+	// Track if selection changed for syncing detail panel
+	selectionChanged := false
+
 	switch {
 	case key.Matches(msg, m.keys.PrevView): // h/left - move to previous column
 		if m.boardColumn > 0 {
@@ -883,6 +1011,7 @@ func (m *Model) handleBoardKeys(msg tea.KeyMsg) tea.Cmd {
 			if m.boardRow < 0 {
 				m.boardRow = 0
 			}
+			selectionChanged = true
 		}
 
 	case key.Matches(msg, m.keys.NextView): // l/right - move to next column
@@ -896,29 +1025,36 @@ func (m *Model) handleBoardKeys(msg tea.KeyMsg) tea.Cmd {
 			if m.boardRow < 0 {
 				m.boardRow = 0
 			}
+			selectionChanged = true
 		}
 
 	case key.Matches(msg, m.keys.Up): // k/up - move up in column
 		if m.boardRow > 0 {
 			m.boardRow--
+			selectionChanged = true
 		}
 
 	case key.Matches(msg, m.keys.Down): // j/down - move down in column
 		count := currentColumnCount()
 		if m.boardRow < count-1 {
 			m.boardRow++
+			selectionChanged = true
 		}
 
 	case key.Matches(msg, m.keys.Top): // g - go to top
-		m.boardRow = 0
+		if m.boardRow != 0 {
+			m.boardRow = 0
+			selectionChanged = true
+		}
 
 	case key.Matches(msg, m.keys.Bottom): // G - go to bottom
 		count := currentColumnCount()
-		if count > 0 {
+		if count > 0 && m.boardRow != count-1 {
 			m.boardRow = count - 1
+			selectionChanged = true
 		}
 
-	case key.Matches(msg, m.keys.Select): // enter - view task details
+	case key.Matches(msg, m.keys.Select): // enter - view task details (full screen in narrow mode)
 		task := m.getBoardSelectedTask()
 		if task != nil {
 			m.selected = task
@@ -936,6 +1072,11 @@ func (m *Model) handleBoardKeys(msg tea.KeyMsg) tea.Cmd {
 
 	case key.Matches(msg, m.keys.Cancel): // esc - back to list
 		m.mode = ViewList
+	}
+
+	// Sync selected task with detail panel after navigation
+	if selectionChanged {
+		m.selected = m.getBoardSelectedTask()
 	}
 
 	return nil

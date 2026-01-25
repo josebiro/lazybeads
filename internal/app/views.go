@@ -565,8 +565,14 @@ func (m Model) viewForm() string {
 func (m Model) viewBoard() string {
 	var b strings.Builder
 
-	// Title
-	b.WriteString(ui.TitleStyle.Render("Board View") + "\n\n")
+	// Determine if we're in wide mode (show detail panel on right)
+	wideMode := m.width >= 100 // Need more width for board + detail
+
+	// Calculate board area width
+	boardWidth := m.width
+	if wideMode {
+		boardWidth = m.width / 2
+	}
 
 	// Get tasks for each column
 	var openTasks, inProgressTasks, closedTasks []string
@@ -575,8 +581,12 @@ func (m Model) viewBoard() string {
 		priority := ui.PriorityStyle(t.Priority).Render(t.PriorityString())
 		id := ui.HelpDescStyle.Render(t.ID)
 		title := t.Title
-		if len(title) > 25 {
-			title = title[:22] + "..."
+		maxTitleLen := 20
+		if wideMode {
+			maxTitleLen = 12 // Shorter titles in wide mode
+		}
+		if len(title) > maxTitleLen {
+			title = title[:maxTitleLen-3] + "..."
 		}
 		line := fmt.Sprintf("%s %s %s", priority, id, title)
 
@@ -591,9 +601,9 @@ func (m Model) viewBoard() string {
 	}
 
 	// Calculate column width (3 columns with spacing)
-	colWidth := (m.width - 8) / 3
-	if colWidth < 20 {
-		colWidth = 20
+	colWidth := (boardWidth - 8) / 3
+	if colWidth < 15 {
+		colWidth = 15
 	}
 
 	// Column height (screen height minus header and footer)
@@ -604,7 +614,7 @@ func (m Model) viewBoard() string {
 
 	// Build column headers with counts
 	openHeader := fmt.Sprintf("Open (%d)", len(openTasks))
-	inProgressHeader := fmt.Sprintf("In Progress (%d)", len(inProgressTasks))
+	inProgressHeader := fmt.Sprintf("In Prog (%d)", len(inProgressTasks))
 	closedHeader := fmt.Sprintf("Closed (%d)", len(closedTasks))
 
 	// Style for focused vs unfocused columns
@@ -628,8 +638,6 @@ func (m Model) viewBoard() string {
 	} else {
 		headers = append(headers, unfocusedHeaderStyle.Render(closedHeader))
 	}
-	b.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, headers...))
-	b.WriteString("\n")
 
 	// Border style for columns
 	focusedColStyle := ui.FocusedPanelStyle.Copy().Width(colWidth).Height(colHeight)
@@ -664,7 +672,41 @@ func (m Model) viewBoard() string {
 	col1 := renderColumn(inProgressTasks, m.boardColumn == 1, m.boardRow)
 	col2 := renderColumn(closedTasks, m.boardColumn == 2, m.boardRow)
 
-	b.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, col0, col1, col2))
+	boardContent := lipgloss.JoinHorizontal(lipgloss.Top, col0, col1, col2)
+
+	// Build title line
+	titleLine := ui.TitleStyle.Render("Board View") + "\n\n"
+
+	// Build header row
+	headerRow := lipgloss.JoinHorizontal(lipgloss.Top, headers...) + "\n"
+
+	if wideMode {
+		// Wide mode: board on left, detail panel on right
+		detailWidth := m.width/2 - 2
+		detailHeight := m.height - 4
+
+		detailContent := ""
+		if m.selected != nil {
+			m.updateDetailContent()
+			detailContent = m.detail.View()
+		} else {
+			detailContent = ui.HelpDescStyle.Render("Select a task to view details")
+		}
+
+		detailPanel := ui.PanelStyle.
+			Width(detailWidth).
+			Height(detailHeight).
+			Render(detailContent)
+
+		// Combine board columns with detail panel
+		leftSide := titleLine + headerRow + boardContent
+		b.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, leftSide, detailPanel))
+	} else {
+		// Narrow mode: board only
+		b.WriteString(titleLine)
+		b.WriteString(headerRow)
+		b.WriteString(boardContent)
+	}
 	b.WriteString("\n")
 
 	// Status bar
