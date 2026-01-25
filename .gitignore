@@ -15,3 +15,5 @@ lazybeads
 
 # Claude code
 .claude/
+
+debug/

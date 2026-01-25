@@ -645,7 +645,7 @@ func (m Model) viewBoard() string {
 
 	// Render column contents with scrolling support
 	renderColumn := func(tasks []string, focused bool, selectedRow int) string {
-		// Available rows for content (subtract 2 for top/bottom border)
+		// Available rows for content (subtract 2 for top/bottom border of lipgloss style)
 		availableRows := colHeight - 2
 		if availableRows < 1 {
 			availableRows = 1
@@ -654,20 +654,25 @@ func (m Model) viewBoard() string {
 		// Determine if we need scroll indicators
 		needsScrollIndicators := len(tasks) > availableRows
 
-		// If we need indicators, reserve space for them
+		// Content rows = available rows minus space for scroll indicators
 		contentRows := availableRows
 		if needsScrollIndicators {
-			contentRows = availableRows - 2 // Reserve 2 rows for indicators
+			contentRows = availableRows - 2 // Reserve 2 rows for ↑/↓ indicators
 			if contentRows < 1 {
 				contentRows = 1
 			}
 		}
 
-		// Calculate scroll offset to keep selected row centered
+		// Calculate scroll offset
 		scrollOffset := 0
 		if len(tasks) > contentRows {
-			// Center the selected row in the viewport when possible
-			scrollOffset = selectedRow - contentRows/2
+			if focused {
+				// For focused column, center the selected row
+				scrollOffset = selectedRow - contentRows/2
+			} else {
+				// For unfocused columns, just show from top
+				scrollOffset = 0
+			}
 			if scrollOffset < 0 {
 				scrollOffset = 0
 			}
@@ -683,28 +688,28 @@ func (m Model) viewBoard() string {
 		if needsScrollIndicators && scrollOffset > 0 {
 			lines = append(lines, ui.HelpDescStyle.Render(fmt.Sprintf("  ↑ %d more", scrollOffset)))
 		} else if needsScrollIndicators {
-			// Empty line to maintain alignment when not scrolled at top
+			// Empty placeholder line to maintain alignment
 			lines = append(lines, "")
 		}
 
-		// Render visible tasks
+		// Calculate end index - ALWAYS limit to contentRows
 		endIdx := scrollOffset + contentRows
 		if endIdx > len(tasks) {
 			endIdx = len(tasks)
 		}
 
+		// Render only the visible tasks
 		for i := scrollOffset; i < endIdx; i++ {
 			task := tasks[i]
 			if focused && i == selectedRow {
-				// Highlight selected row
 				lines = append(lines, ui.SelectedTaskStyle.Render("> "+task))
 			} else {
 				lines = append(lines, "  "+task)
 			}
 		}
 
-		// Pad with empty lines if needed to maintain consistent height
-		for len(lines) < availableRows-1 && needsScrollIndicators {
+		// Pad with empty lines to fill available space
+		for len(lines) < availableRows-1 {
 			lines = append(lines, "")
 		}
 
@@ -713,12 +718,22 @@ func (m Model) viewBoard() string {
 			remaining := len(tasks) - endIdx
 			lines = append(lines, ui.HelpDescStyle.Render(fmt.Sprintf("  ↓ %d more", remaining)))
 		} else if needsScrollIndicators {
-			// Empty line to maintain alignment when no more items below
+			// Empty placeholder to maintain consistent height
 			lines = append(lines, "")
 		}
 
+		// Handle empty column
 		if len(tasks) == 0 {
 			lines = []string{ui.HelpDescStyle.Render("  (empty)")}
+			// Pad to fill height
+			for len(lines) < availableRows {
+				lines = append(lines, "")
+			}
+		}
+
+		// CRITICAL: Limit total lines to availableRows to prevent overflow
+		if len(lines) > availableRows {
+			lines = lines[:availableRows]
 		}
 
 		content := strings.Join(lines, "\n")
