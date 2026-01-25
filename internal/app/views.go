@@ -639,25 +639,22 @@ func (m Model) viewBoard() string {
 		headers = append(headers, unfocusedHeaderStyle.Render(closedHeader))
 	}
 
-	// Border style for columns
-	focusedColStyle := ui.FocusedPanelStyle.Copy().Width(colWidth).Height(colHeight)
-	unfocusedColStyle := ui.PanelStyle.Copy().Width(colWidth).Height(colHeight)
-
 	// Render column contents with scrolling support
+	// We manually draw borders to ensure exact height control (lipgloss Height doesn't clip)
 	renderColumn := func(tasks []string, focused bool, selectedRow int) string {
-		// Available rows for content (subtract 2 for top/bottom border of lipgloss style)
-		availableRows := colHeight - 2
-		if availableRows < 1 {
-			availableRows = 1
+		// Content area height (subtract 2 for top/bottom border)
+		contentHeight := colHeight - 2
+		if contentHeight < 1 {
+			contentHeight = 1
 		}
 
 		// Determine if we need scroll indicators
-		needsScrollIndicators := len(tasks) > availableRows
+		needsScrollIndicators := len(tasks) > contentHeight
 
 		// Content rows = available rows minus space for scroll indicators
-		contentRows := availableRows
+		contentRows := contentHeight
 		if needsScrollIndicators {
-			contentRows = availableRows - 2 // Reserve 2 rows for ↑/↓ indicators
+			contentRows = contentHeight - 2 // Reserve 2 rows for ↑/↓ indicators
 			if contentRows < 1 {
 				contentRows = 1
 			}
@@ -688,17 +685,16 @@ func (m Model) viewBoard() string {
 		if needsScrollIndicators && scrollOffset > 0 {
 			lines = append(lines, ui.HelpDescStyle.Render(fmt.Sprintf("  ↑ %d more", scrollOffset)))
 		} else if needsScrollIndicators {
-			// Empty placeholder line to maintain alignment
-			lines = append(lines, "")
+			lines = append(lines, "") // Placeholder for alignment
 		}
 
-		// Calculate end index - ALWAYS limit to contentRows
+		// Calculate visible range
 		endIdx := scrollOffset + contentRows
 		if endIdx > len(tasks) {
 			endIdx = len(tasks)
 		}
 
-		// Render only the visible tasks
+		// Render visible tasks
 		for i := scrollOffset; i < endIdx; i++ {
 			task := tasks[i]
 			if focused && i == selectedRow {
@@ -708,39 +704,60 @@ func (m Model) viewBoard() string {
 			}
 		}
 
-		// Pad with empty lines to fill available space
-		for len(lines) < availableRows-1 {
-			lines = append(lines, "")
-		}
-
 		// Show scroll indicator at bottom if more items
 		if needsScrollIndicators && endIdx < len(tasks) {
 			remaining := len(tasks) - endIdx
 			lines = append(lines, ui.HelpDescStyle.Render(fmt.Sprintf("  ↓ %d more", remaining)))
 		} else if needsScrollIndicators {
-			// Empty placeholder to maintain consistent height
-			lines = append(lines, "")
+			lines = append(lines, "") // Placeholder for alignment
 		}
 
 		// Handle empty column
 		if len(tasks) == 0 {
 			lines = []string{ui.HelpDescStyle.Render("  (empty)")}
-			// Pad to fill height
-			for len(lines) < availableRows {
-				lines = append(lines, "")
-			}
 		}
 
-		// CRITICAL: Limit total lines to availableRows to prevent overflow
-		if len(lines) > availableRows {
-			lines = lines[:availableRows]
+		// Pad to exact content height
+		for len(lines) < contentHeight {
+			lines = append(lines, "")
+		}
+		// Truncate if somehow we have too many
+		if len(lines) > contentHeight {
+			lines = lines[:contentHeight]
 		}
 
-		content := strings.Join(lines, "\n")
+		// Build box manually with exact dimensions
+		borderColor := lipgloss.Color("240")
 		if focused {
-			return focusedColStyle.Render(content)
+			borderColor = lipgloss.Color("63") // Blue for focused
 		}
-		return unfocusedColStyle.Render(content)
+
+		// Top border
+		topBorder := lipgloss.NewStyle().Foreground(borderColor).Render("┌" + strings.Repeat("─", colWidth-2) + "┐")
+
+		// Content lines with side borders
+		var contentLines []string
+		for _, line := range lines {
+			// Pad/truncate line to fit column width (minus borders and padding)
+			innerWidth := colWidth - 4 // 2 for borders, 2 for padding
+			lineWidth := lipgloss.Width(line)
+			if lineWidth > innerWidth {
+				// Truncate - need to be careful with ANSI codes
+				line = line[:innerWidth]
+			}
+			padding := innerWidth - lipgloss.Width(line)
+			if padding < 0 {
+				padding = 0
+			}
+			paddedLine := line + strings.Repeat(" ", padding)
+			contentLines = append(contentLines,
+				lipgloss.NewStyle().Foreground(borderColor).Render("│")+" "+paddedLine+" "+lipgloss.NewStyle().Foreground(borderColor).Render("│"))
+		}
+
+		// Bottom border
+		bottomBorder := lipgloss.NewStyle().Foreground(borderColor).Render("└" + strings.Repeat("─", colWidth-2) + "┘")
+
+		return topBorder + "\n" + strings.Join(contentLines, "\n") + "\n" + bottomBorder
 	}
 
 	col0 := renderColumn(openTasks, m.boardColumn == 0, m.boardRow)
