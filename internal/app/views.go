@@ -565,15 +565,9 @@ func (m Model) viewForm() string {
 func (m Model) viewBoard() string {
 	var b strings.Builder
 
-	// Determine if we're in wide mode (show detail panel on right)
-	// Need at least 160 chars wide to show both board and detail comfortably
-	wideMode := m.width >= 160
-
-	// Calculate board area width - give board 2/3 of space in wide mode
+	// Board view uses full width - no detail panel to keep layout simple
+	// Press Enter to see full task details
 	boardWidth := m.width
-	if wideMode {
-		boardWidth = (m.width * 2) / 3
-	}
 
 	// Get tasks for each column
 	var openTasks, inProgressTasks, closedTasks []string
@@ -582,10 +576,7 @@ func (m Model) viewBoard() string {
 		priority := ui.PriorityStyle(t.Priority).Render(t.PriorityString())
 		id := ui.HelpDescStyle.Render(t.ID)
 		title := t.Title
-		maxTitleLen := 20
-		if wideMode {
-			maxTitleLen = 12 // Shorter titles in wide mode
-		}
+		maxTitleLen := 25 // More space for titles since no detail panel
 		if len(title) > maxTitleLen {
 			title = title[:maxTitleLen-3] + "..."
 		}
@@ -773,35 +764,10 @@ func (m Model) viewBoard() string {
 	// Build header row
 	headerRow := lipgloss.JoinHorizontal(lipgloss.Top, headers...) + "\n"
 
-	// Write title and headers first (always)
+	// Write title, headers, and board content
 	b.WriteString(titleLine)
 	b.WriteString(headerRow)
-
-	if wideMode {
-		// Wide mode: board columns on left (2/3), detail panel on right (1/3)
-		detailWidth := m.width/3 - 4
-		// Detail height should match board columns height
-		detailHeight := colHeight
-
-		detailContent := ""
-		if m.selected != nil {
-			m.updateDetailContent()
-			detailContent = m.detail.View()
-		} else {
-			detailContent = ui.HelpDescStyle.Render("Select a task to view details")
-		}
-
-		detailPanel := ui.PanelStyle.
-			Width(detailWidth).
-			Height(detailHeight).
-			Render(detailContent)
-
-		// Join board columns with detail panel horizontally
-		b.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, boardContent, detailPanel))
-	} else {
-		// Narrow mode: board only
-		b.WriteString(boardContent)
-	}
+	b.WriteString(boardContent)
 	b.WriteString("\n")
 
 	// Status bar

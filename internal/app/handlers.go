@@ -253,17 +253,8 @@ func (m *Model) handleHelpMouse(msg tea.MouseMsg) tea.Cmd {
 
 // handleBoardMouse handles mouse events in the board view
 func (m *Model) handleBoardMouse(msg tea.MouseMsg) tea.Cmd {
-	// Determine if we're in wide mode (must match viewBoard)
-	wideMode := m.width >= 160
-
-	// Calculate board area width - give board 2/3 of space in wide mode
-	boardWidth := m.width
-	if wideMode {
-		boardWidth = (m.width * 2) / 3
-	}
-
 	// Column dimensions (must match viewBoard calculations)
-	colWidth := (boardWidth - 8) / 3
+	colWidth := (m.width - 8) / 3
 	if colWidth < 15 {
 		colWidth = 15
 	}
@@ -276,17 +267,6 @@ func (m *Model) handleBoardMouse(msg tea.MouseMsg) tea.Cmd {
 	switch msg.Action {
 	case tea.MouseActionPress:
 		if msg.Button == tea.MouseButtonLeft {
-			// Check if click is in the board area (left half in wide mode)
-			if wideMode && msg.X >= boardWidth {
-				// Click in detail panel area - could open full detail view
-				if m.selected != nil {
-					m.updateDetailContent()
-					m.mode = ViewDetail
-					return m.loadComments(m.selected.ID)
-				}
-				return nil
-			}
-
 			// Determine which column was clicked
 			clickedColumn := -1
 			if msg.X < colWidth {
