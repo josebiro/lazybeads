@@ -28,7 +28,7 @@ func (m Model) View() string {
 			return m.viewDetailOverlay()
 		}
 		return m.viewMain()
-	case ViewEditTitle, ViewEditStatus, ViewEditPriority, ViewEditType, ViewFilter:
+	case ViewEditTitle, ViewEditStatus, ViewEditPriority, ViewEditType, ViewFilter, ViewAddBlocker, ViewRemoveBlocker:
 		return m.viewMainWithModal()
 	case ViewAddComment:
 		return m.viewAddComment()
@@ -138,6 +138,10 @@ Filtering
   enter       Confirm filter and return to navigation
   esc         Clear filter and return to navigation
   backspace   On empty input, exit search mode
+  o           Toggle open filter (open + in_progress)
+  O           Toggle closed filter (closed only)
+  r           Toggle ready filter (no blockers)
+  A           Clear all filters
 
 Actions
   enter       View task details
@@ -154,6 +158,8 @@ Field Editing
   y           Copy issue ID to clipboard
   d           Edit description ($EDITOR)
   C           Add comment
+  B           Add blocker (dependency)
+  D           Remove blocker
 
 General
   ?           Toggle this help
@@ -297,13 +303,12 @@ func (m Model) renderStatusBar() string {
 		}{
 			{"j/k", "nav"},
 			{"h/l", "panel"},
-			{"/", "filter"},
+			{"/", "search"},
+			{"o/O/r", "filter"},
 			{"S", "sort"},
 			{"b", "board"},
 			{"enter", "detail"},
 			{"e/s/p/t/d", "edit"},
-			{"y", "copy"},
-			{"x", "delete"},
 			{"?", "help"},
 			{"q", "quit"},
 		}
@@ -311,6 +316,14 @@ func (m Model) renderStatusBar() string {
 		for _, k := range keys {
 			part := ui.HelpKeyStyle.Render(k.key) + ":" + ui.HelpDescStyle.Render(k.desc)
 			parts = append(parts, part)
+		}
+
+		// Show current filter mode if not All
+		if m.filterMode != FilterAll {
+			filterPart := ui.HelpDescStyle.Render("[") +
+				ui.HelpKeyStyle.Render(m.filterMode.String()) +
+				ui.HelpDescStyle.Render("]")
+			parts = append(parts, filterPart)
 		}
 
 		// Show current sort mode if not default
@@ -382,28 +395,26 @@ func (m *Model) updateDetailContent() {
 		b.WriteString("\n")
 		b.WriteString(ui.DetailLabelStyle.Render("Description:"))
 		b.WriteString("\n")
-		// Wrap description to fit panel width
+		// Render markdown description
 		descWidth := m.detail.Width - 2
 		if descWidth < 20 {
 			descWidth = 20
 		}
-		wrappedDesc := lipgloss.NewStyle().Width(descWidth).Render(t.Description)
-		b.WriteString(wrappedDesc)
-		b.WriteString("\n")
+		renderedDesc := ui.RenderMarkdown(t.Description, descWidth)
+		b.WriteString(renderedDesc)
 	}
 
 	if t.CloseReason != "" {
 		b.WriteString("\n")
 		b.WriteString(ui.DetailLabelStyle.Render("Close Reason:"))
 		b.WriteString("\n")
-		// Wrap close reason to fit panel width
+		// Render markdown close reason
 		descWidth := m.detail.Width - 2
 		if descWidth < 20 {
 			descWidth = 20
 		}
-		wrappedReason := lipgloss.NewStyle().Width(descWidth).Render(t.CloseReason)
-		b.WriteString(wrappedReason)
-		b.WriteString("\n")
+		renderedReason := ui.RenderMarkdown(t.CloseReason, descWidth)
+		b.WriteString(renderedReason)
 	}
 
 	if len(t.BlockedBy) > 0 {

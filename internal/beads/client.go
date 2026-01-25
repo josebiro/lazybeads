@@ -223,3 +223,23 @@ func (c *Client) AddComment(id string, text string) error {
 
 	return nil
 }
+
+// AddBlocker adds a dependency (blocker blocks blockee)
+func (c *Client) AddBlocker(blockee string, blocker string) error {
+	cmd := exec.Command("bd", "dep", "add", blockee, blocker)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("bd dep add failed: %w", err)
+	}
+
+	return nil
+}
+
+// RemoveBlocker removes a dependency
+func (c *Client) RemoveBlocker(blockee string, blocker string) error {
+	cmd := exec.Command("bd", "dep", "rm", blockee, blocker)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("bd dep rm failed: %w", err)
+	}
+
+	return nil
+}

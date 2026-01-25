@@ -64,6 +64,16 @@ type commentAddedMsg struct {
 	err error
 }
 
+// blockerAddedMsg is sent when a blocker is added
+type blockerAddedMsg struct {
+	err error
+}
+
+// blockerRemovedMsg is sent when a blocker is removed
+type blockerRemovedMsg struct {
+	err error
+}
+
 // tickMsg triggers periodic refresh
 type tickMsg time.Time
 

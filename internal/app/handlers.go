@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"strings"
 	"text/template"
+	"time"
 
 	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/key"
@@ -315,6 +316,10 @@ func (m *Model) handleKeyPress(msg tea.KeyMsg) tea.Cmd {
 		return m.handleAddCommentKeys(msg)
 	case ViewBoard:
 		return m.handleBoardKeys(msg)
+	case ViewAddBlocker:
+		return m.handleAddBlockerKeys(msg)
+	case ViewRemoveBlocker:
+		return m.handleRemoveBlockerKeys(msg)
 	}
 	return nil
 }
@@ -436,6 +441,70 @@ func (m *Model) handleListKeys(msg tea.KeyMsg) tea.Cmd {
 			return m.commentInput.Focus()
 		}
 
+	case key.Matches(msg, m.keys.AddBlocker):
+		if task := m.getSelectedTask(); task != nil {
+			// Build list of potential blockers (all other open tasks)
+			var options []ui.ModalOption
+			for _, t := range m.tasks {
+				if t.ID != task.ID && t.Status != "closed" {
+					// Check if already blocking
+					alreadyBlocking := false
+					for _, b := range task.BlockedBy {
+						if b == t.ID {
+							alreadyBlocking = true
+							break
+						}
+					}
+					if !alreadyBlocking {
+						label := fmt.Sprintf("%s - %s", t.ID, t.Title)
+						if len(label) > 50 {
+							label = label[:47] + "..."
+						}
+						options = append(options, ui.ModalOption{
+							Label: label,
+							Value: t.ID,
+						})
+					}
+				}
+			}
+			if len(options) == 0 {
+				m.statusMsg = "No available tasks to add as blocker"
+				return tea.Tick(statusFlashDuration, func(t time.Time) tea.Msg {
+					return clearStatusMsg{}
+				})
+			}
+			m.modal = ui.NewModalSelect("Add Blocker", task.ID, options, "")
+			m.mode = ViewAddBlocker
+		}
+
+	case key.Matches(msg, m.keys.RemoveBlocker):
+		if task := m.getSelectedTask(); task != nil {
+			if len(task.BlockedBy) == 0 {
+				m.statusMsg = "No blockers to remove"
+				return tea.Tick(statusFlashDuration, func(t time.Time) tea.Msg {
+					return clearStatusMsg{}
+				})
+			}
+			// Build list of current blockers
+			var options []ui.ModalOption
+			for _, blockerID := range task.BlockedBy {
+				label := blockerID
+				// Try to get title from tasks map
+				if blockerTask, ok := m.tasksMap[blockerID]; ok {
+					label = fmt.Sprintf("%s - %s", blockerID, blockerTask.Title)
+					if len(label) > 50 {
+						label = label[:47] + "..."
+					}
+				}
+				options = append(options, ui.ModalOption{
+					Label: label,
+					Value: blockerID,
+				})
+			}
+			m.modal = ui.NewModalSelect("Remove Blocker", task.ID, options, "")
+			m.mode = ViewRemoveBlocker
+		}
+
 	case key.Matches(msg, m.keys.Filter):
 		// Enter inline search mode in status bar
 		m.searchMode = true
@@ -462,6 +531,38 @@ func (m *Model) handleListKeys(msg tea.KeyMsg) tea.Cmd {
 		m.boardColumn = 0
 		m.boardRow = 0
 		m.mode = ViewBoard
+
+	case key.Matches(msg, m.keys.Open):
+		// Toggle open filter (show open + in_progress only)
+		if m.filterMode == FilterOpen {
+			m.filterMode = FilterAll
+		} else {
+			m.filterMode = FilterOpen
+		}
+		m.distributeTasks()
+
+	case key.Matches(msg, m.keys.Closed):
+		// Toggle closed filter (show closed only)
+		if m.filterMode == FilterClosed {
+			m.filterMode = FilterAll
+		} else {
+			m.filterMode = FilterClosed
+		}
+		m.distributeTasks()
+
+	case key.Matches(msg, m.keys.Ready):
+		// Toggle ready filter (show tasks without blockers)
+		if m.filterMode == FilterReady {
+			m.filterMode = FilterAll
+		} else {
+			m.filterMode = FilterReady
+		}
+		m.distributeTasks()
+
+	case key.Matches(msg, m.keys.All):
+		// Clear filter mode
+		m.filterMode = FilterAll
+		m.distributeTasks()
 
 	default:
 		// Check custom commands
@@ -688,6 +789,56 @@ func (m *Model) handleAddCommentKeys(msg tea.KeyMsg) tea.Cmd {
 		m.mode = ViewList
 	case "esc":
 		m.commentInput.Blur()
+		m.mode = ViewList
+	}
+	return nil
+}
+
+func (m *Model) handleAddBlockerKeys(msg tea.KeyMsg) tea.Cmd {
+	key := msg.String()
+
+	switch key {
+	case "k", "up":
+		m.modal.MoveUp()
+	case "j", "down":
+		m.modal.MoveDown()
+	case "enter":
+		if m.selected != nil {
+			blockerID := m.modal.SelectedValue()
+			taskID := m.selected.ID
+			m.mode = ViewList
+			return func() tea.Msg {
+				err := m.client.AddBlocker(taskID, blockerID)
+				return blockerAddedMsg{err: err}
+			}
+		}
+		m.mode = ViewList
+	case "esc":
+		m.mode = ViewList
+	}
+	return nil
+}
+
+func (m *Model) handleRemoveBlockerKeys(msg tea.KeyMsg) tea.Cmd {
+	key := msg.String()
+
+	switch key {
+	case "k", "up":
+		m.modal.MoveUp()
+	case "j", "down":
+		m.modal.MoveDown()
+	case "enter":
+		if m.selected != nil {
+			blockerID := m.modal.SelectedValue()
+			taskID := m.selected.ID
+			m.mode = ViewList
+			return func() tea.Msg {
+				err := m.client.RemoveBlocker(taskID, blockerID)
+				return blockerRemovedMsg{err: err}
+			}
+		}
+		m.mode = ViewList
+	case "esc":
 		m.mode = ViewList
 	}
 	return nil

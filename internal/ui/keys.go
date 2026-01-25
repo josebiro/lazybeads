@@ -27,11 +27,16 @@ type KeyMap struct {
 	AddComment      key.Binding
 	CopyID          key.Binding
 
+	// Dependency management
+	AddBlocker    key.Binding
+	RemoveBlocker key.Binding
+
 	// Filtering
 	Filter     key.Binding
 	FilterDone key.Binding
 	Ready      key.Binding
 	Open       key.Binding
+	Closed     key.Binding
 	All        key.Binding
 
 	// Sorting
@@ -131,6 +136,16 @@ func DefaultKeyMap() KeyMap {
 			key.WithHelp("C", "add comment"),
 		),
 
+		// Dependency management
+		AddBlocker: key.NewBinding(
+			key.WithKeys("B"),
+			key.WithHelp("B", "add blocker"),
+		),
+		RemoveBlocker: key.NewBinding(
+			key.WithKeys("D"),
+			key.WithHelp("D", "remove blocker"),
+		),
+
 		// Filtering
 		Filter: key.NewBinding(
 			key.WithKeys("/"),
@@ -147,6 +162,10 @@ func DefaultKeyMap() KeyMap {
 		Open: key.NewBinding(
 			key.WithKeys("o"),
 			key.WithHelp("o", "open"),
+		),
+		Closed: key.NewBinding(
+			key.WithKeys("O"),
+			key.WithHelp("O", "closed"),
 		),
 		All: key.NewBinding(
 			key.WithKeys("A"),

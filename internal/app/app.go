@@ -33,6 +33,8 @@ const (
 	ViewFilter
 	ViewAddComment
 	ViewBoard
+	ViewAddBlocker
+	ViewRemoveBlocker
 )
 
 // PanelFocus represents which panel is focused
@@ -44,6 +46,32 @@ const (
 	FocusClosed
 	panelCount
 )
+
+// FilterMode represents quick filter presets
+type FilterMode int
+
+const (
+	FilterAll    FilterMode = iota // Show all tasks
+	FilterOpen                     // Show only open tasks
+	FilterClosed                   // Show only closed tasks
+	FilterReady                    // Show only ready tasks (no blockers)
+)
+
+// String returns the display name for the filter mode
+func (f FilterMode) String() string {
+	switch f {
+	case FilterAll:
+		return "All"
+	case FilterOpen:
+		return "Open"
+	case FilterClosed:
+		return "Closed"
+	case FilterReady:
+		return "Ready"
+	default:
+		return "?"
+	}
+}
 
 // SortMode represents how tasks are sorted
 type SortMode int
@@ -137,6 +165,7 @@ type Model struct {
 
 	// Filter state
 	filterQuery string
+	filterMode  FilterMode       // quick filter mode (All/Open/Closed/Ready)
 	searchMode  bool             // true when inline search is active
 	searchInput textinput.Model  // text input for inline search in status bar
 
@@ -156,6 +185,9 @@ type Model struct {
 	// Comments for selected task
 	comments     []models.Comment
 	commentInput textinput.Model
+
+	// Blocker selection (for add/remove blocker modals)
+	blockerOptions []string // List of issue IDs to choose from
 
 	// Custom commands from config
 	customCommands []config.CustomCommand
@@ -406,6 +438,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}))
 		}
 
+	case blockerAddedMsg:
+		if msg.err != nil {
+			m.err = msg.err
+		} else {
+			m.statusMsg = "Blocker added!"
+			cmds = append(cmds, tea.Tick(statusFlashDuration, func(t time.Time) tea.Msg {
+				return clearStatusMsg{}
+			}))
+		}
+		m.mode = ViewList
+		cmds = append(cmds, m.loadTasks())
+
+	case blockerRemovedMsg:
+		if msg.err != nil {
+			m.err = msg.err
+		} else {
+			m.statusMsg = "Blocker removed!"
+			cmds = append(cmds, tea.Tick(statusFlashDuration, func(t time.Time) tea.Msg {
+				return clearStatusMsg{}
+			}))
+		}
+		m.mode = ViewList
+		cmds = append(cmds, m.loadTasks())
+
 	case clearStatusMsg:
 		m.statusMsg = ""
 	}
@@ -588,7 +644,7 @@ func (m *Model) distributeTasks() {
 	var inProgress, open, closed []models.Task
 	filterLower := strings.ToLower(m.filterQuery)
 	for _, t := range m.tasks {
-		// Apply filter if set
+		// Apply text filter if set
 		if filterLower != "" {
 			titleLower := strings.ToLower(t.Title)
 			idLower := strings.ToLower(t.ID)
@@ -596,6 +652,24 @@ func (m *Model) distributeTasks() {
 				continue
 			}
 		}
+
+		// Apply quick filter mode
+		switch m.filterMode {
+		case FilterOpen:
+			if t.Status == "closed" {
+				continue
+			}
+		case FilterClosed:
+			if t.Status != "closed" {
+				continue
+			}
+		case FilterReady:
+			// Ready = open/in_progress AND not blocked
+			if t.Status == "closed" || len(t.BlockedBy) > 0 {
+				continue
+			}
+		}
+
 		switch t.Status {
 		case "in_progress":
 			inProgress = append(inProgress, t)
