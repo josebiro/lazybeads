@@ -328,18 +328,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.distributeTasks()
 				return m, nil
 			}
-			// Escape goes back to list, never quits
-			if m.mode != ViewList {
+			// Handle escape based on current mode
+			switch m.mode {
+			case ViewDetail:
+				// Return to where we came from (board or list)
+				if m.previousMode == ViewBoard {
+					m.mode = ViewBoard
+				} else {
+					m.mode = ViewList
+				}
+				m.previousMode = ViewList // Reset
+				return m, nil
+			case ViewList:
+				// In list mode, clear filter if active
+				if m.filterQuery != "" {
+					m.filterQuery = ""
+					m.distributeTasks()
+					return m, nil
+				}
+				return m, nil
+			default:
+				// Other modes: go back to list
 				m.mode = ViewList
 				return m, nil
 			}
-			// In list mode, clear filter if active
-			if m.filterQuery != "" {
-				m.filterQuery = ""
-				m.distributeTasks()
-				return m, nil
-			}
-			return m, nil
 		}
 
 		prevMode := m.mode

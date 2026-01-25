@@ -99,13 +99,26 @@ func (m Model) viewMain() string {
 func (m Model) viewDetailOverlay() string {
 	var b strings.Builder
 
+	// Calculate available height:
+	// - Title line + blank line = 2
+	// - Content area = height - 4 (title, blank, content, help bar)
+	// - Help bar = 1
+	contentHeight := m.height - 4
+	if contentHeight < 5 {
+		contentHeight = 5
+	}
+
+	// Resize viewport for overlay mode
+	m.detail.Width = m.width - 6  // Account for border padding
+	m.detail.Height = contentHeight - 2  // Account for OverlayStyle border
+
 	title := ui.TitleStyle.Render("Task Details")
 	b.WriteString(title + "\n\n")
 
 	m.updateDetailContent()
 	content := ui.OverlayStyle.
 		Width(m.width - 4).
-		Height(m.height - 6).
+		Height(contentHeight).
 		Render(m.detail.View())
 	b.WriteString(content)
 	b.WriteString("\n")
