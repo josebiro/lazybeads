@@ -10,8 +10,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"lazybeads/internal/models"
-	"lazybeads/internal/ui"
+	"github.com/josebiro/lazybeads/internal/models"
+	"github.com/josebiro/lazybeads/internal/ui"
 )
 
 // PanelModel represents a single panel showing a filtered list of tasks
