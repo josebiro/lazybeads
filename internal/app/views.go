@@ -6,6 +6,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/josebiro/lazybeads/internal/models"
 	"github.com/josebiro/lazybeads/internal/ui"
 )
 
@@ -578,208 +579,242 @@ func (m Model) viewForm() string {
 func (m Model) viewBoard() string {
 	var b strings.Builder
 
-	// Board view uses full width - no detail panel to keep layout simple
-	// Press Enter to see full task details
-	boardWidth := m.width
+	// Board view with 4 columns: Blocked, Ready, In Progress, Done
+	// Each column has color-coded borders matching the bv tool style
 
-	// Get tasks for each column
-	var openTasks, inProgressTasks, closedTasks []string
+	// Column border colors
+	blockedColor := lipgloss.Color("1")    // Red for blocked
+	readyColor := lipgloss.Color("2")      // Green for ready
+	inProgressColor := lipgloss.Color("3") // Yellow for in progress
+	doneColor := lipgloss.Color("6")       // Cyan for done
+
+	// Collect tasks into 4 categories
+	type boardTask struct {
+		task     models.Task
+		priority string
+		id       string
+		title    string
+	}
+
+	var blockedTasks, readyTasks, inProgressTasks, doneTasks []boardTask
+
 	for _, t := range m.tasks {
-		// Format: priority + ID + title (truncated)
-		priority := ui.PriorityStyle(t.Priority).Render(t.PriorityString())
-		id := ui.HelpDescStyle.Render(t.ID)
-		title := t.Title
-		maxTitleLen := 25 // More space for titles since no detail panel
-		if len(title) > maxTitleLen {
-			title = title[:maxTitleLen-3] + "..."
+		bt := boardTask{
+			task:     t,
+			priority: t.PriorityString(),
+			id:       t.ID,
+			title:    t.Title,
 		}
-		line := fmt.Sprintf("%s %s %s", priority, id, title)
 
 		switch t.Status {
 		case "open":
-			openTasks = append(openTasks, line)
-		case "in_progress":
-			inProgressTasks = append(inProgressTasks, line)
-		case "closed":
-			closedTasks = append(closedTasks, line)
-		}
-	}
-
-	// Calculate column width (3 columns with spacing)
-	colWidth := (boardWidth - 8) / 3
-	if colWidth < 15 {
-		colWidth = 15
-	}
-
-	// Column height (screen height minus header and footer)
-	colHeight := m.height - 6
-	if colHeight < 5 {
-		colHeight = 5
-	}
-
-	// Build column headers with counts
-	openHeader := fmt.Sprintf("Open (%d)", len(openTasks))
-	inProgressHeader := fmt.Sprintf("In Prog (%d)", len(inProgressTasks))
-	closedHeader := fmt.Sprintf("Closed (%d)", len(closedTasks))
-
-	// Style for focused vs unfocused columns
-	focusedHeaderStyle := ui.TitleStyle.Copy().Width(colWidth).Align(lipgloss.Center)
-	unfocusedHeaderStyle := ui.HelpDescStyle.Copy().Width(colWidth).Align(lipgloss.Center)
-
-	// Render headers
-	var headers []string
-	if m.boardColumn == 0 {
-		headers = append(headers, focusedHeaderStyle.Render(openHeader))
-	} else {
-		headers = append(headers, unfocusedHeaderStyle.Render(openHeader))
-	}
-	if m.boardColumn == 1 {
-		headers = append(headers, focusedHeaderStyle.Render(inProgressHeader))
-	} else {
-		headers = append(headers, unfocusedHeaderStyle.Render(inProgressHeader))
-	}
-	if m.boardColumn == 2 {
-		headers = append(headers, focusedHeaderStyle.Render(closedHeader))
-	} else {
-		headers = append(headers, unfocusedHeaderStyle.Render(closedHeader))
-	}
-
-	// Render column contents with scrolling support
-	// We manually draw borders to ensure exact height control (lipgloss Height doesn't clip)
-	renderColumn := func(tasks []string, focused bool, selectedRow int) string {
-		// Content area height (subtract 2 for top/bottom border)
-		contentHeight := colHeight - 2
-		if contentHeight < 1 {
-			contentHeight = 1
-		}
-
-		// Determine if we need scroll indicators
-		needsScrollIndicators := len(tasks) > contentHeight
-
-		// Content rows = available rows minus space for scroll indicators
-		contentRows := contentHeight
-		if needsScrollIndicators {
-			contentRows = contentHeight - 2 // Reserve 2 rows for ↑/↓ indicators
-			if contentRows < 1 {
-				contentRows = 1
-			}
-		}
-
-		// Calculate scroll offset
-		scrollOffset := 0
-		if len(tasks) > contentRows {
-			if focused {
-				// For focused column, center the selected row
-				scrollOffset = selectedRow - contentRows/2
+			// Open tasks: split into Blocked vs Ready
+			if t.IsBlocked() {
+				blockedTasks = append(blockedTasks, bt)
 			} else {
-				// For unfocused columns, just show from top
-				scrollOffset = 0
+				readyTasks = append(readyTasks, bt)
+			}
+		case "in_progress":
+			inProgressTasks = append(inProgressTasks, bt)
+		case "closed":
+			doneTasks = append(doneTasks, bt)
+		}
+	}
+
+	// Calculate column width (4 columns)
+	colWidth := (m.width - 4) / 4 // -4 for minimal spacing between columns
+	if colWidth < 20 {
+		colWidth = 20
+	}
+
+	// Column height (screen height minus title and footer)
+	colHeight := m.height - 4
+	if colHeight < 8 {
+		colHeight = 8
+	}
+
+	// Card height (each task card is 3 lines: top border, content, bottom border)
+	cardHeight := 3
+	// How many cards fit in the column (minus 2 for column borders)
+	cardsPerColumn := (colHeight - 2) / cardHeight
+	if cardsPerColumn < 1 {
+		cardsPerColumn = 1
+	}
+
+	// Render a single task card with colored border
+	renderCard := func(bt boardTask, borderColor lipgloss.Color, selected bool, cardWidth int) string {
+		innerWidth := cardWidth - 4 // -4 for borders and padding
+
+		// Build card content: "P# id title"
+		priority := ui.PriorityStyle(bt.task.Priority).Render(bt.priority)
+		idStyled := ui.HelpDescStyle.Render(bt.id)
+
+		// Calculate available width for title
+		prefixWidth := lipgloss.Width(bt.priority) + 1 + lipgloss.Width(bt.id) + 1
+		titleWidth := innerWidth - prefixWidth
+		if titleWidth < 5 {
+			titleWidth = 5
+		}
+
+		title := bt.title
+		if lipgloss.Width(title) > titleWidth {
+			for lipgloss.Width(title+"…") > titleWidth && len(title) > 0 {
+				title = title[:len(title)-1]
+			}
+			title = title + "…"
+		}
+
+		content := fmt.Sprintf("%s %s %s", priority, idStyled, title)
+
+		// Pad content to fill inner width
+		contentWidth := lipgloss.Width(content)
+		if contentWidth < innerWidth {
+			content = content + strings.Repeat(" ", innerWidth-contentWidth)
+		}
+
+		// Build card borders
+		borderStyle := lipgloss.NewStyle().Foreground(borderColor)
+		if selected {
+			borderStyle = borderStyle.Bold(true)
+		}
+
+		topBorder := borderStyle.Render("╭" + strings.Repeat("─", cardWidth-2) + "╮")
+		bottomBorder := borderStyle.Render("╰" + strings.Repeat("─", cardWidth-2) + "╯")
+
+		// Content line with selection indicator
+		var middleLine string
+		if selected {
+			// Highlight selected card
+			highlightStyle := lipgloss.NewStyle().
+				Background(lipgloss.Color("236")).
+				Foreground(lipgloss.Color("15"))
+			middleLine = borderStyle.Render("│") + " " + highlightStyle.Render(content) + " " + borderStyle.Render("│")
+		} else {
+			middleLine = borderStyle.Render("│") + " " + content + " " + borderStyle.Render("│")
+		}
+
+		return topBorder + "\n" + middleLine + "\n" + bottomBorder
+	}
+
+	// Render a column with tasks as cards
+	renderColumn := func(tasks []boardTask, borderColor lipgloss.Color, focused bool, selectedRow int, header string) string {
+		headerColor := borderColor
+		if !focused {
+			headerColor = ui.ColorMuted
+		}
+
+		// Header with count
+		headerText := fmt.Sprintf(" %s (%d) ", header, len(tasks))
+		headerStyle := lipgloss.NewStyle().
+			Foreground(headerColor).
+			Bold(focused)
+
+		// Calculate scroll offset for cards
+		scrollOffset := 0
+		if len(tasks) > cardsPerColumn {
+			if focused {
+				scrollOffset = selectedRow - cardsPerColumn/2
 			}
 			if scrollOffset < 0 {
 				scrollOffset = 0
 			}
-			maxOffset := len(tasks) - contentRows
+			maxOffset := len(tasks) - cardsPerColumn
 			if scrollOffset > maxOffset {
 				scrollOffset = maxOffset
 			}
 		}
 
-		var lines []string
+		// Build column content
+		var cards []string
 
-		// Show scroll indicator at top if scrolled
-		if needsScrollIndicators && scrollOffset > 0 {
-			lines = append(lines, ui.HelpDescStyle.Render(fmt.Sprintf("  ↑ %d more", scrollOffset)))
-		} else if needsScrollIndicators {
-			lines = append(lines, "") // Placeholder for alignment
+		// Scroll indicator at top
+		if scrollOffset > 0 {
+			cards = append(cards, ui.HelpDescStyle.Render(fmt.Sprintf(" ↑ %d more", scrollOffset)))
 		}
 
-		// Calculate visible range
-		endIdx := scrollOffset + contentRows
+		// Render visible cards
+		endIdx := scrollOffset + cardsPerColumn
 		if endIdx > len(tasks) {
 			endIdx = len(tasks)
 		}
 
-		// Render visible tasks
 		for i := scrollOffset; i < endIdx; i++ {
-			task := tasks[i]
-			if focused && i == selectedRow {
-				lines = append(lines, ui.SelectedTaskStyle.Render("> "+task))
-			} else {
-				lines = append(lines, "  "+task)
-			}
+			isSelected := focused && i == selectedRow
+			card := renderCard(tasks[i], borderColor, isSelected, colWidth-2)
+			cards = append(cards, card)
 		}
 
-		// Show scroll indicator at bottom if more items
-		if needsScrollIndicators && endIdx < len(tasks) {
+		// Scroll indicator at bottom
+		if endIdx < len(tasks) {
 			remaining := len(tasks) - endIdx
-			lines = append(lines, ui.HelpDescStyle.Render(fmt.Sprintf("  ↓ %d more", remaining)))
-		} else if needsScrollIndicators {
-			lines = append(lines, "") // Placeholder for alignment
+			cards = append(cards, ui.HelpDescStyle.Render(fmt.Sprintf(" ↓ %d more", remaining)))
 		}
 
-		// Handle empty column
+		// Empty column placeholder
 		if len(tasks) == 0 {
-			lines = []string{ui.HelpDescStyle.Render("  (empty)")}
+			emptyStyle := lipgloss.NewStyle().Foreground(ui.ColorMuted).Italic(true)
+			cards = append(cards, emptyStyle.Render(" (empty)"))
 		}
 
-		// Pad to exact content height
-		for len(lines) < contentHeight {
-			lines = append(lines, "")
-		}
-		// Truncate if somehow we have too many
-		if len(lines) > contentHeight {
-			lines = lines[:contentHeight]
+		// Build column border
+		borderStyle := lipgloss.NewStyle().Foreground(borderColor)
+		if !focused {
+			borderStyle = lipgloss.NewStyle().Foreground(ui.ColorBorder)
 		}
 
-		// Build box manually with exact dimensions
-		borderColor := lipgloss.Color("240")
-		if focused {
-			borderColor = lipgloss.Color("63") // Blue for focused
+		// Column header line embedded in top border
+		headerWidth := lipgloss.Width(headerText)
+		remainingWidth := colWidth - headerWidth - 4
+		if remainingWidth < 0 {
+			remainingWidth = 0
 		}
 
-		// Top border
-		topBorder := lipgloss.NewStyle().Foreground(borderColor).Render("┌" + strings.Repeat("─", colWidth-2) + "┐")
+		topBorder := borderStyle.Render("╭─") + headerStyle.Render(headerText) + borderStyle.Render(strings.Repeat("─", remainingWidth)+"─╮")
 
-		// Content lines with side borders
-		var contentLines []string
-		for _, line := range lines {
-			// Pad/truncate line to fit column width (minus borders and padding)
-			innerWidth := colWidth - 4 // 2 for borders, 2 for padding
+		// Join cards into column content
+		columnContent := strings.Join(cards, "\n")
+
+		// Wrap in column borders - calculate actual content height
+		contentLines := strings.Split(columnContent, "\n")
+		var borderedContent []string
+		for _, line := range contentLines {
 			lineWidth := lipgloss.Width(line)
-			if lineWidth > innerWidth {
-				// Truncate - need to be careful with ANSI codes
-				line = line[:innerWidth]
+			innerWidth := colWidth - 4
+			if lineWidth < innerWidth {
+				line = line + strings.Repeat(" ", innerWidth-lineWidth)
 			}
-			padding := innerWidth - lipgloss.Width(line)
-			if padding < 0 {
-				padding = 0
-			}
-			paddedLine := line + strings.Repeat(" ", padding)
-			contentLines = append(contentLines,
-				lipgloss.NewStyle().Foreground(borderColor).Render("│")+" "+paddedLine+" "+lipgloss.NewStyle().Foreground(borderColor).Render("│"))
+			borderedContent = append(borderedContent, borderStyle.Render("│")+" "+line+" "+borderStyle.Render("│"))
 		}
 
-		// Bottom border
-		bottomBorder := lipgloss.NewStyle().Foreground(borderColor).Render("└" + strings.Repeat("─", colWidth-2) + "┘")
+		// Pad to fill column height
+		contentHeight := colHeight - 2 // -2 for top/bottom borders
+		for len(borderedContent) < contentHeight {
+			emptyLine := strings.Repeat(" ", colWidth-4)
+			borderedContent = append(borderedContent, borderStyle.Render("│")+" "+emptyLine+" "+borderStyle.Render("│"))
+		}
+		// Truncate if too many
+		if len(borderedContent) > contentHeight {
+			borderedContent = borderedContent[:contentHeight]
+		}
 
-		return topBorder + "\n" + strings.Join(contentLines, "\n") + "\n" + bottomBorder
+		bottomBorder := borderStyle.Render("╰" + strings.Repeat("─", colWidth-2) + "╯")
+
+		return topBorder + "\n" + strings.Join(borderedContent, "\n") + "\n" + bottomBorder
 	}
 
-	col0 := renderColumn(openTasks, m.boardColumn == 0, m.boardRow)
-	col1 := renderColumn(inProgressTasks, m.boardColumn == 1, m.boardRow)
-	col2 := renderColumn(closedTasks, m.boardColumn == 2, m.boardRow)
+	// Render all 4 columns
+	col0 := renderColumn(blockedTasks, blockedColor, m.boardColumn == 0, m.boardRow, "BLOCKED")
+	col1 := renderColumn(readyTasks, readyColor, m.boardColumn == 1, m.boardRow, "READY")
+	col2 := renderColumn(inProgressTasks, inProgressColor, m.boardColumn == 2, m.boardRow, "IN PROGRESS")
+	col3 := renderColumn(doneTasks, doneColor, m.boardColumn == 3, m.boardRow, "DONE")
 
-	boardContent := lipgloss.JoinHorizontal(lipgloss.Top, col0, col1, col2)
+	boardContent := lipgloss.JoinHorizontal(lipgloss.Top, col0, col1, col2, col3)
 
 	// Build title line
-	titleLine := ui.TitleStyle.Render("Board View") + "\n\n"
+	titleLine := ui.TitleStyle.Render("BOARD [by: Status]") + "\n"
 
-	// Build header row
-	headerRow := lipgloss.JoinHorizontal(lipgloss.Top, headers...) + "\n"
-
-	// Write title, headers, and board content
+	// Write title and board content
 	b.WriteString(titleLine)
-	b.WriteString(headerRow)
 	b.WriteString(boardContent)
 	b.WriteString("\n")
 

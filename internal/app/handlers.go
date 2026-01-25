@@ -254,8 +254,8 @@ func (m *Model) handleHelpMouse(msg tea.MouseMsg) tea.Cmd {
 
 // handleBoardMouse handles mouse events in the board view
 func (m *Model) handleBoardMouse(msg tea.MouseMsg) tea.Cmd {
-	// Column dimensions (must match viewBoard calculations)
-	colWidth := (m.width - 8) / 3
+	// Column dimensions (must match viewBoard calculations - 4 columns)
+	colWidth := (m.width - 10) / 4
 	if colWidth < 15 {
 		colWidth = 15
 	}
@@ -265,17 +265,45 @@ func (m *Model) handleBoardMouse(msg tea.MouseMsg) tea.Cmd {
 	// Column content starts after header
 	colTop := headerLines
 
+	// Helper to get column count
+	getColumnCount := func(col int) int {
+		var count int
+		for _, t := range m.tasks {
+			switch col {
+			case 0: // Blocked
+				if t.Status == "open" && t.IsBlocked() {
+					count++
+				}
+			case 1: // Ready
+				if t.Status == "open" && !t.IsBlocked() {
+					count++
+				}
+			case 2: // In Progress
+				if t.Status == "in_progress" {
+					count++
+				}
+			case 3: // Done
+				if t.Status == "closed" {
+					count++
+				}
+			}
+		}
+		return count
+	}
+
 	switch msg.Action {
 	case tea.MouseActionPress:
 		if msg.Button == tea.MouseButtonLeft {
-			// Determine which column was clicked
+			// Determine which column was clicked (4 columns: Blocked, Ready, In Progress, Done)
 			clickedColumn := -1
 			if msg.X < colWidth {
-				clickedColumn = 0 // Open
+				clickedColumn = 0 // Blocked
 			} else if msg.X < colWidth*2 {
-				clickedColumn = 1 // In Progress
+				clickedColumn = 1 // Ready
 			} else if msg.X < colWidth*3 {
-				clickedColumn = 2 // Closed
+				clickedColumn = 2 // In Progress
+			} else if msg.X < colWidth*4 {
+				clickedColumn = 3 // Done
 			}
 
 			if clickedColumn >= 0 {
@@ -283,23 +311,7 @@ func (m *Model) handleBoardMouse(msg tea.MouseMsg) tea.Cmd {
 				clickedRow := msg.Y - colTop - 1 // -1 for column border
 
 				// Get task count for clicked column
-				var columnCount int
-				for _, t := range m.tasks {
-					switch clickedColumn {
-					case 0:
-						if t.Status == "open" {
-							columnCount++
-						}
-					case 1:
-						if t.Status == "in_progress" {
-							columnCount++
-						}
-					case 2:
-						if t.Status == "closed" {
-							columnCount++
-						}
-					}
-				}
+				columnCount := getColumnCount(clickedColumn)
 
 				// Update selection if valid
 				if clickedRow >= 0 && clickedRow < columnCount {
@@ -328,23 +340,7 @@ func (m *Model) handleBoardMouse(msg tea.MouseMsg) tea.Cmd {
 			}
 		} else if msg.Button == tea.MouseButtonWheelDown {
 			// Get count for current column
-			var columnCount int
-			for _, t := range m.tasks {
-				switch m.boardColumn {
-				case 0:
-					if t.Status == "open" {
-						columnCount++
-					}
-				case 1:
-					if t.Status == "in_progress" {
-						columnCount++
-					}
-				case 2:
-					if t.Status == "closed" {
-						columnCount++
-					}
-				}
-			}
+			columnCount := getColumnCount(m.boardColumn)
 			if m.boardRow < columnCount-1 {
 				m.boardRow++
 				m.selected = m.getBoardSelectedTask()
@@ -958,16 +954,20 @@ func (m *Model) handleRemoveBlockerKeys(msg tea.KeyMsg) tea.Cmd {
 }
 
 func (m *Model) handleBoardKeys(msg tea.KeyMsg) tea.Cmd {
-	// Get tasks for each column to know bounds
-	var openCount, inProgressCount, closedCount int
+	// Get tasks for each column to know bounds (4 columns: Blocked, Ready, In Progress, Done)
+	var blockedCount, readyCount, inProgressCount, doneCount int
 	for _, t := range m.tasks {
 		switch t.Status {
 		case "open":
-			openCount++
+			if t.IsBlocked() {
+				blockedCount++
+			} else {
+				readyCount++
+			}
 		case "in_progress":
 			inProgressCount++
 		case "closed":
-			closedCount++
+			doneCount++
 		}
 	}
 
@@ -975,11 +975,13 @@ func (m *Model) handleBoardKeys(msg tea.KeyMsg) tea.Cmd {
 	currentColumnCount := func() int {
 		switch m.boardColumn {
 		case 0:
-			return openCount
+			return blockedCount
 		case 1:
-			return inProgressCount
+			return readyCount
 		case 2:
-			return closedCount
+			return inProgressCount
+		case 3:
+			return doneCount
 		}
 		return 0
 	}
@@ -1003,7 +1005,7 @@ func (m *Model) handleBoardKeys(msg tea.KeyMsg) tea.Cmd {
 		}
 
 	case key.Matches(msg, m.keys.NextView): // l/right - move to next column
-		if m.boardColumn < 2 {
+		if m.boardColumn < 3 {
 			m.boardColumn++
 			// Clamp row to new column's bounds
 			newCount := currentColumnCount()

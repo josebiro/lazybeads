@@ -769,27 +769,35 @@ func (m *Model) getSelectedTask() *models.Task {
 }
 
 // getBoardSelectedTask returns the currently selected task in board view
+// Board has 4 columns: 0=Blocked, 1=Ready, 2=In Progress, 3=Done
 func (m *Model) getBoardSelectedTask() *models.Task {
-	var openTasks, inProgressTasks, closedTasks []models.Task
+	var blockedTasks, readyTasks, inProgressTasks, doneTasks []models.Task
 	for _, t := range m.tasks {
 		switch t.Status {
 		case "open":
-			openTasks = append(openTasks, t)
+			// Split open tasks into Blocked vs Ready
+			if t.IsBlocked() {
+				blockedTasks = append(blockedTasks, t)
+			} else {
+				readyTasks = append(readyTasks, t)
+			}
 		case "in_progress":
 			inProgressTasks = append(inProgressTasks, t)
 		case "closed":
-			closedTasks = append(closedTasks, t)
+			doneTasks = append(doneTasks, t)
 		}
 	}
 
 	var tasks []models.Task
 	switch m.boardColumn {
 	case 0:
-		tasks = openTasks
+		tasks = blockedTasks
 	case 1:
-		tasks = inProgressTasks
+		tasks = readyTasks
 	case 2:
-		tasks = closedTasks
+		tasks = inProgressTasks
+	case 3:
+		tasks = doneTasks
 	}
 
 	if m.boardRow >= 0 && m.boardRow < len(tasks) {
