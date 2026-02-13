@@ -13,8 +13,9 @@ const statusFlashDuration = 1 * time.Second
 
 // tasksLoadedMsg is sent when tasks are loaded
 type tasksLoadedMsg struct {
-	tasks []models.Task
-	err   error
+	tasks    []models.Task
+	readyIDs map[string]bool
+	err      error
 }
 
 // taskCreatedMsg is sent when a task is created
@@ -84,7 +85,20 @@ func (m Model) loadTasks() tea.Cmd {
 		// Load all tasks so we can distribute them to the 3 panels
 		// Use --limit=0 to bypass the default 50-task limit
 		tasks, err := m.client.List("--all", "--limit=0")
-		return tasksLoadedMsg{tasks: tasks, err: err}
+		if err != nil {
+			return tasksLoadedMsg{err: err}
+		}
+
+		// Also load ready task IDs for board view column categorization
+		readyIDs := make(map[string]bool)
+		readyTasks, readyErr := m.client.Ready()
+		if readyErr == nil {
+			for _, t := range readyTasks {
+				readyIDs[t.ID] = true
+			}
+		}
+
+		return tasksLoadedMsg{tasks: tasks, readyIDs: readyIDs, err: err}
 	}
 }
 

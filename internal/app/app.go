@@ -175,9 +175,11 @@ type Model struct {
 	sortMode SortMode
 
 	// Board view state
-	boardColumn  int      // 0=Blocked, 1=Ready, 2=In Progress, 3=Done
-	boardRow     int      // Selected row within the column
-	previousMode ViewMode // Track where user came from (for returning from detail view)
+	boardColumn       int            // 0=Blocked, 1=Open, 2=Ready, 3=In Progress, 4=Done
+	boardRow          int            // Selected row within the column
+	boardColumnOffset int            // Leftmost visible column index (for horizontal scroll)
+	readyIDs          map[string]bool // Task IDs from bd ready (for board column categorization)
+	previousMode      ViewMode       // Track where user came from (for returning from detail view)
 
 	// Double-click detection for board view
 	lastClickTime   time.Time // Time of last click
@@ -377,6 +379,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = msg.err
 		} else {
 			m.tasks = msg.tasks
+			m.readyIDs = msg.readyIDs
 			m.distributeTasks()
 		}
 
@@ -767,41 +770,39 @@ func (m *Model) getSelectedTask() *models.Task {
 }
 
 // getBoardSelectedTask returns the currently selected task in board view
-// Board has 4 columns: 0=Blocked, 1=Ready, 2=In Progress, 3=Done
+// Board has 5 columns: 0=Blocked, 1=Open, 2=Ready, 3=In Progress, 4=Done
 func (m *Model) getBoardSelectedTask() *models.Task {
-	var blockedTasks, readyTasks, inProgressTasks, doneTasks []models.Task
+	columns := m.getBoardColumns()
+	if m.boardColumn >= 0 && m.boardColumn < len(columns) {
+		tasks := columns[m.boardColumn]
+		if m.boardRow >= 0 && m.boardRow < len(tasks) {
+			return &tasks[m.boardRow]
+		}
+	}
+	return nil
+}
+
+// getBoardColumns returns task lists for all 5 board columns
+// 0=Blocked, 1=Open, 2=Ready, 3=In Progress, 4=Done
+func (m *Model) getBoardColumns() [5][]models.Task {
+	var columns [5][]models.Task
 	for _, t := range m.tasks {
 		switch t.Status {
 		case "open":
-			// Split open tasks into Blocked vs Ready
 			if t.IsBlocked() {
-				blockedTasks = append(blockedTasks, t)
+				columns[0] = append(columns[0], t)
+			} else if m.readyIDs[t.ID] {
+				columns[2] = append(columns[2], t)
 			} else {
-				readyTasks = append(readyTasks, t)
+				columns[1] = append(columns[1], t)
 			}
 		case "in_progress":
-			inProgressTasks = append(inProgressTasks, t)
+			columns[3] = append(columns[3], t)
 		case "closed":
-			doneTasks = append(doneTasks, t)
+			columns[4] = append(columns[4], t)
 		}
 	}
-
-	var tasks []models.Task
-	switch m.boardColumn {
-	case 0:
-		tasks = blockedTasks
-	case 1:
-		tasks = readyTasks
-	case 2:
-		tasks = inProgressTasks
-	case 3:
-		tasks = doneTasks
-	}
-
-	if m.boardRow >= 0 && m.boardRow < len(tasks) {
-		return &tasks[m.boardRow]
-	}
-	return nil
+	return columns
 }
 
 // isInProgressVisible returns true if the In Progress panel should be shown

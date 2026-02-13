@@ -617,52 +617,70 @@ func (m Model) viewForm() string {
 func (m Model) viewBoard() string {
 	var b strings.Builder
 
-	// Board view with 4 columns: Blocked, Ready, In Progress, Done
-	// Each column has color-coded borders matching the bv tool style
+	// Board view with 5 columns: Blocked, Open, Ready, In Progress, Done
+	const totalColumns = 5
+	const minColWidth = 30
 
 	// Column border colors
-	blockedColor := lipgloss.Color("1")    // Red for blocked
-	readyColor := lipgloss.Color("2")      // Green for ready
-	inProgressColor := lipgloss.Color("3") // Yellow for in progress
-	doneColor := lipgloss.Color("6")       // Cyan for done
+	columnColors := [totalColumns]lipgloss.Color{
+		lipgloss.Color("1"), // Red - Blocked
+		lipgloss.Color("7"), // White - Open
+		lipgloss.Color("2"), // Green - Ready
+		lipgloss.Color("3"), // Yellow - In Progress
+		lipgloss.Color("6"), // Cyan - Done
+	}
+	columnHeaders := [totalColumns]string{"BLOCKED", "OPEN", "READY", "IN PROGRESS", "DONE"}
 
-	// Collect tasks into 4 categories
+	// Get tasks categorized into 5 columns
+	columns := m.getBoardColumns()
+
+	// Wrap tasks into boardTask structs
 	type boardTask struct {
 		task     models.Task
 		priority string
 		id       string
 		title    string
 	}
-
-	var blockedTasks, readyTasks, inProgressTasks, doneTasks []boardTask
-
-	for _, t := range m.tasks {
-		bt := boardTask{
-			task:     t,
-			priority: t.PriorityString(),
-			id:       t.ID,
-			title:    t.Title,
-		}
-
-		switch t.Status {
-		case "open":
-			// Open tasks: split into Blocked vs Ready
-			if t.IsBlocked() {
-				blockedTasks = append(blockedTasks, bt)
-			} else {
-				readyTasks = append(readyTasks, bt)
-			}
-		case "in_progress":
-			inProgressTasks = append(inProgressTasks, bt)
-		case "closed":
-			doneTasks = append(doneTasks, bt)
+	var boardColumns [totalColumns][]boardTask
+	for col := 0; col < totalColumns; col++ {
+		for _, t := range columns[col] {
+			boardColumns[col] = append(boardColumns[col], boardTask{
+				task:     t,
+				priority: t.PriorityString(),
+				id:       t.ID,
+				title:    t.Title,
+			})
 		}
 	}
 
-	// Calculate column width (4 columns)
-	colWidth := (m.width - 4) / 4 // -4 for minimal spacing between columns
-	if colWidth < 20 {
-		colWidth = 20
+	// Responsive layout: how many columns fit?
+	visibleCols := m.width / minColWidth
+	if visibleCols > totalColumns {
+		visibleCols = totalColumns
+	}
+	if visibleCols < 1 {
+		visibleCols = 1
+	}
+
+	// Column width fills available space
+	colWidth := m.width / visibleCols
+	if colWidth < minColWidth {
+		colWidth = minColWidth
+	}
+
+	// Ensure boardColumnOffset keeps focused column visible
+	offset := m.boardColumnOffset
+	if m.boardColumn < offset {
+		offset = m.boardColumn
+	}
+	if m.boardColumn >= offset+visibleCols {
+		offset = m.boardColumn - visibleCols + 1
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	if offset > totalColumns-visibleCols {
+		offset = totalColumns - visibleCols
 	}
 
 	// Column height (screen height minus title and footer)
@@ -671,23 +689,20 @@ func (m Model) viewBoard() string {
 		colHeight = 8
 	}
 
-	// Card height (each task card is 3 lines: top border, content, bottom border)
+	// Card height (each task card is 3 lines)
 	cardHeight := 3
-	// How many cards fit in the column (minus 2 for column borders)
 	cardsPerColumn := (colHeight - 2) / cardHeight
 	if cardsPerColumn < 1 {
 		cardsPerColumn = 1
 	}
 
-	// Render a single task card with colored border
+	// Render a single task card
 	renderCard := func(bt boardTask, borderColor lipgloss.Color, selected bool, cardWidth int) string {
-		innerWidth := cardWidth - 4 // -4 for borders and padding
+		innerWidth := cardWidth - 4
 
-		// Build card content: "P# id title"
 		priority := ui.PriorityStyle(bt.task.Priority).Render(bt.priority)
 		idStyled := ui.HelpDescStyle.Render(bt.id)
 
-		// Calculate available width for title
 		prefixWidth := lipgloss.Width(bt.priority) + 1 + lipgloss.Width(bt.id) + 1
 		titleWidth := innerWidth - prefixWidth
 		if titleWidth < 5 {
@@ -704,13 +719,11 @@ func (m Model) viewBoard() string {
 
 		content := fmt.Sprintf("%s %s %s", priority, idStyled, title)
 
-		// Pad content to fill inner width
 		contentWidth := lipgloss.Width(content)
 		if contentWidth < innerWidth {
 			content = content + strings.Repeat(" ", innerWidth-contentWidth)
 		}
 
-		// Build card borders
 		borderStyle := lipgloss.NewStyle().Foreground(borderColor)
 		if selected {
 			borderStyle = borderStyle.Bold(true)
@@ -719,10 +732,8 @@ func (m Model) viewBoard() string {
 		topBorder := borderStyle.Render("╭" + strings.Repeat("─", cardWidth-2) + "╮")
 		bottomBorder := borderStyle.Render("╰" + strings.Repeat("─", cardWidth-2) + "╯")
 
-		// Content line with selection indicator
 		var middleLine string
 		if selected {
-			// Highlight selected card
 			highlightStyle := lipgloss.NewStyle().
 				Background(lipgloss.Color("236")).
 				Foreground(lipgloss.Color("15"))
@@ -734,20 +745,18 @@ func (m Model) viewBoard() string {
 		return topBorder + "\n" + middleLine + "\n" + bottomBorder
 	}
 
-	// Render a column with tasks as cards
-	renderColumn := func(tasks []boardTask, borderColor lipgloss.Color, focused bool, selectedRow int, header string) string {
+	// Render a column
+	renderColumn := func(tasks []boardTask, borderColor lipgloss.Color, focused bool, selectedRow int, header string, thisColWidth int) string {
 		headerColor := borderColor
 		if !focused {
 			headerColor = ui.ColorMuted
 		}
 
-		// Header with count
 		headerText := fmt.Sprintf(" %s (%d) ", header, len(tasks))
 		headerStyle := lipgloss.NewStyle().
 			Foreground(headerColor).
 			Bold(focused)
 
-		// Calculate scroll offset for cards
 		scrollOffset := 0
 		if len(tasks) > cardsPerColumn {
 			if focused {
@@ -762,15 +771,12 @@ func (m Model) viewBoard() string {
 			}
 		}
 
-		// Build column content
 		var cards []string
 
-		// Scroll indicator at top
 		if scrollOffset > 0 {
 			cards = append(cards, ui.HelpDescStyle.Render(fmt.Sprintf(" ↑ %d more", scrollOffset)))
 		}
 
-		// Render visible cards
 		endIdx := scrollOffset + cardsPerColumn
 		if endIdx > len(tasks) {
 			endIdx = len(tasks)
@@ -778,85 +784,97 @@ func (m Model) viewBoard() string {
 
 		for i := scrollOffset; i < endIdx; i++ {
 			isSelected := focused && i == selectedRow
-			card := renderCard(tasks[i], borderColor, isSelected, colWidth-2)
+			card := renderCard(tasks[i], borderColor, isSelected, thisColWidth-2)
 			cards = append(cards, card)
 		}
 
-		// Scroll indicator at bottom
 		if endIdx < len(tasks) {
 			remaining := len(tasks) - endIdx
 			cards = append(cards, ui.HelpDescStyle.Render(fmt.Sprintf(" ↓ %d more", remaining)))
 		}
 
-		// Empty column placeholder
 		if len(tasks) == 0 {
 			emptyStyle := lipgloss.NewStyle().Foreground(ui.ColorMuted).Italic(true)
 			cards = append(cards, emptyStyle.Render(" (empty)"))
 		}
 
-		// Build column border
 		borderStyle := lipgloss.NewStyle().Foreground(borderColor)
 		if !focused {
 			borderStyle = lipgloss.NewStyle().Foreground(ui.ColorBorder)
 		}
 
-		// Column header line embedded in top border
 		headerWidth := lipgloss.Width(headerText)
-		remainingWidth := colWidth - headerWidth - 4
+		remainingWidth := thisColWidth - headerWidth - 4
 		if remainingWidth < 0 {
 			remainingWidth = 0
 		}
 
 		topBorder := borderStyle.Render("╭─") + headerStyle.Render(headerText) + borderStyle.Render(strings.Repeat("─", remainingWidth)+"─╮")
 
-		// Join cards into column content
 		columnContent := strings.Join(cards, "\n")
 
-		// Wrap in column borders - calculate actual content height
 		contentLines := strings.Split(columnContent, "\n")
 		var borderedContent []string
 		for _, line := range contentLines {
 			lineWidth := lipgloss.Width(line)
-			innerWidth := colWidth - 4
+			innerWidth := thisColWidth - 4
 			if lineWidth < innerWidth {
 				line = line + strings.Repeat(" ", innerWidth-lineWidth)
 			}
 			borderedContent = append(borderedContent, borderStyle.Render("│")+" "+line+" "+borderStyle.Render("│"))
 		}
 
-		// Pad to fill column height
-		contentHeight := colHeight - 2 // -2 for top/bottom borders
+		contentHeight := colHeight - 2
 		for len(borderedContent) < contentHeight {
-			emptyLine := strings.Repeat(" ", colWidth-4)
+			emptyLine := strings.Repeat(" ", thisColWidth-4)
 			borderedContent = append(borderedContent, borderStyle.Render("│")+" "+emptyLine+" "+borderStyle.Render("│"))
 		}
-		// Truncate if too many
 		if len(borderedContent) > contentHeight {
 			borderedContent = borderedContent[:contentHeight]
 		}
 
-		bottomBorder := borderStyle.Render("╰" + strings.Repeat("─", colWidth-2) + "╯")
+		bottomBorder := borderStyle.Render("╰" + strings.Repeat("─", thisColWidth-2) + "╯")
 
 		return topBorder + "\n" + strings.Join(borderedContent, "\n") + "\n" + bottomBorder
 	}
 
-	// Render all 4 columns
-	col0 := renderColumn(blockedTasks, blockedColor, m.boardColumn == 0, m.boardRow, "BLOCKED")
-	col1 := renderColumn(readyTasks, readyColor, m.boardColumn == 1, m.boardRow, "READY")
-	col2 := renderColumn(inProgressTasks, inProgressColor, m.boardColumn == 2, m.boardRow, "IN PROGRESS")
-	col3 := renderColumn(doneTasks, doneColor, m.boardColumn == 3, m.boardRow, "DONE")
+	// Render visible columns
+	var colViews []string
+	for i := offset; i < offset+visibleCols && i < totalColumns; i++ {
+		col := renderColumn(
+			boardColumns[i],
+			columnColors[i],
+			m.boardColumn == i,
+			m.boardRow,
+			columnHeaders[i],
+			colWidth,
+		)
+		colViews = append(colViews, col)
+	}
 
-	boardContent := lipgloss.JoinHorizontal(lipgloss.Top, col0, col1, col2, col3)
+	boardContent := lipgloss.JoinHorizontal(lipgloss.Top, colViews...)
 
-	// Build title line
-	titleLine := ui.TitleStyle.Render("BOARD [by: Status]") + "\n"
+	// Build title line with scroll position indicator
+	titleText := "BOARD"
+	if visibleCols < totalColumns {
+		titleText = fmt.Sprintf("BOARD [%d-%d of %d]", offset+1, offset+visibleCols, totalColumns)
+	}
 
-	// Write title and board content
+	// Add scroll arrows to title
+	var titleParts []string
+	if offset > 0 {
+		titleParts = append(titleParts, ui.HelpDescStyle.Render("◀ "))
+	}
+	titleParts = append(titleParts, ui.TitleStyle.Render(titleText))
+	if offset+visibleCols < totalColumns {
+		titleParts = append(titleParts, ui.HelpDescStyle.Render(" ▶"))
+	}
+	titleLine := strings.Join(titleParts, "") + "\n"
+
 	b.WriteString(titleLine)
 	b.WriteString(boardContent)
 	b.WriteString("\n")
 
-	// Status bar
 	b.WriteString(ui.HelpBarStyle.Render("h/l:column  j/k:select  enter:detail  b:list view  ?:help  q:quit"))
 
 	return b.String()

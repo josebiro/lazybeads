@@ -265,44 +265,38 @@ func (m *Model) handleHelpMouse(msg tea.MouseMsg) tea.Cmd {
 
 // handleBoardMouse handles mouse events in the board view
 func (m *Model) handleBoardMouse(msg tea.MouseMsg) tea.Cmd {
-	// Column dimensions (must match viewBoard calculations - 4 columns)
-	colWidth := (m.width - 10) / 4
-	if colWidth < 15 {
-		colWidth = 15
+	const totalColumns = 5
+	const minColWidth = 30
+
+	// Match responsive layout from viewBoard
+	visibleCols := m.width / minColWidth
+	if visibleCols > totalColumns {
+		visibleCols = totalColumns
 	}
+	if visibleCols < 1 {
+		visibleCols = 1
+	}
+	colWidth := m.width / visibleCols
 
-	// Header takes 3 lines (title + blank + headers)
-	headerLines := 3
-	// Column content starts after header
-	colTop := headerLines
+	// Header takes 1 line (title)
+	colTop := 1
 
-	// Helper to get column count
+	// Get column data
+	columns := m.getBoardColumns()
 	getColumnCount := func(col int) int {
-		var count int
-		for _, t := range m.tasks {
-			switch col {
-			case 0: // Blocked
-				if t.Status == "open" && t.IsBlocked() {
-					count++
-				}
-			case 1: // Ready
-				if t.Status == "open" && !t.IsBlocked() {
-					count++
-				}
-			case 2: // In Progress
-				if t.Status == "in_progress" {
-					count++
-				}
-			case 3: // Done
-				if t.Status == "closed" {
-					count++
-				}
-			}
+		if col >= 0 && col < totalColumns {
+			return len(columns[col])
 		}
-		return count
+		return 0
 	}
 
-	// Double-click threshold (300ms is typical for double-click detection)
+	// Map screen X to actual column index (accounting for offset)
+	screenColIndex := msg.X / colWidth
+	if screenColIndex >= visibleCols {
+		screenColIndex = visibleCols - 1
+	}
+	actualColumn := m.boardColumnOffset + screenColIndex
+
 	const doubleClickThreshold = 300 * time.Millisecond
 
 	if msg.Action != tea.MouseActionPress {
@@ -311,38 +305,21 @@ func (m *Model) handleBoardMouse(msg tea.MouseMsg) tea.Cmd {
 
 	switch msg.Button {
 	case tea.MouseButtonLeft:
-		// Determine which column was clicked (4 columns: Blocked, Ready, In Progress, Done)
-		clickedColumn := -1
-		if msg.X < colWidth {
-			clickedColumn = 0 // Blocked
-		} else if msg.X < colWidth*2 {
-			clickedColumn = 1 // Ready
-		} else if msg.X < colWidth*3 {
-			clickedColumn = 2 // In Progress
-		} else if msg.X < colWidth*4 {
-			clickedColumn = 3 // Done
-		}
-
-		if clickedColumn >= 0 {
-			// Calculate which row was clicked (accounting for header and borders)
-			// Each card is 3 lines tall, so divide by card height
+		if actualColumn >= 0 && actualColumn < totalColumns {
 			cardHeight := 3
-			clickedRow := (msg.Y - colTop - 1) / cardHeight // -1 for column border
+			clickedRow := (msg.Y - colTop - 1) / cardHeight
 
-			// Get task count for clicked column
-			columnCount := getColumnCount(clickedColumn)
+			columnCount := getColumnCount(actualColumn)
 
-			// Check for double-click on same task
 			now := time.Now()
 			isDoubleClick := clickedRow >= 0 &&
 				clickedRow < columnCount &&
-				clickedColumn == m.lastClickColumn &&
+				actualColumn == m.lastClickColumn &&
 				clickedRow == m.lastClickRow &&
 				now.Sub(m.lastClickTime) < doubleClickThreshold
 
 			if isDoubleClick {
-				// Double-click: open detail view
-				m.boardColumn = clickedColumn
+				m.boardColumn = actualColumn
 				m.boardRow = clickedRow
 				m.selected = m.getBoardSelectedTask()
 				if m.selected != nil {
@@ -350,46 +327,49 @@ func (m *Model) handleBoardMouse(msg tea.MouseMsg) tea.Cmd {
 					m.updateDetailContent()
 					m.previousMode = ViewBoard
 					m.mode = ViewDetail
-					// Reset click tracking
 					m.lastClickTime = time.Time{}
 					return m.loadComments(m.selected.ID)
 				}
 			} else {
-				// Single click: select the task
 				if clickedRow >= 0 && clickedRow < columnCount {
-					m.boardColumn = clickedColumn
+					m.boardColumn = actualColumn
 					m.boardRow = clickedRow
 					m.selected = m.getBoardSelectedTask()
-					// Track for double-click detection
 					m.lastClickTime = now
-					m.lastClickColumn = clickedColumn
+					m.lastClickColumn = actualColumn
 					m.lastClickRow = clickedRow
 				} else if clickedRow >= 0 {
-					// Clicked in column but below tasks - just focus the column
-					m.boardColumn = clickedColumn
+					m.boardColumn = actualColumn
 					if columnCount > 0 {
 						m.boardRow = columnCount - 1
 					} else {
 						m.boardRow = 0
 					}
 					m.selected = m.getBoardSelectedTask()
-					// Reset click tracking since we didn't click on a valid task
 					m.lastClickTime = time.Time{}
 				}
 			}
 		}
 
 	case tea.MouseButtonWheelUp:
-		if m.boardRow > 0 {
-			m.boardRow--
+		// Scroll the column under the mouse cursor
+		if actualColumn >= 0 && actualColumn < totalColumns {
+			// Focus the hovered column and scroll up
+			m.boardColumn = actualColumn
+			if m.boardRow > 0 {
+				m.boardRow--
+			}
 			m.selected = m.getBoardSelectedTask()
 		}
 
 	case tea.MouseButtonWheelDown:
-		// Get count for current column
-		columnCount := getColumnCount(m.boardColumn)
-		if m.boardRow < columnCount-1 {
-			m.boardRow++
+		// Scroll the column under the mouse cursor
+		if actualColumn >= 0 && actualColumn < totalColumns {
+			m.boardColumn = actualColumn
+			columnCount := getColumnCount(actualColumn)
+			if m.boardRow < columnCount-1 {
+				m.boardRow++
+			}
 			m.selected = m.getBoardSelectedTask()
 		}
 	}
@@ -692,6 +672,7 @@ func (m *Model) handleListKeys(msg tea.KeyMsg) tea.Cmd {
 		// Switch to board view
 		m.boardColumn = 0
 		m.boardRow = 0
+		m.boardColumnOffset = 0
 		m.mode = ViewBoard
 
 	case key.Matches(msg, m.keys.Open):
@@ -1013,67 +994,45 @@ func (m *Model) handleRemoveBlockerKeys(msg tea.KeyMsg) tea.Cmd {
 }
 
 func (m *Model) handleBoardKeys(msg tea.KeyMsg) tea.Cmd {
-	// Get tasks for each column to know bounds (4 columns: Blocked, Ready, In Progress, Done)
-	var blockedCount, readyCount, inProgressCount, doneCount int
-	for _, t := range m.tasks {
-		switch t.Status {
-		case "open":
-			if t.IsBlocked() {
-				blockedCount++
-			} else {
-				readyCount++
-			}
-		case "in_progress":
-			inProgressCount++
-		case "closed":
-			doneCount++
-		}
-	}
+	const totalColumns = 5
 
-	// Get count for current column
-	currentColumnCount := func() int {
-		switch m.boardColumn {
-		case 0:
-			return blockedCount
-		case 1:
-			return readyCount
-		case 2:
-			return inProgressCount
-		case 3:
-			return doneCount
+	// Get column counts from getBoardColumns
+	columns := m.getBoardColumns()
+	columnCount := func(col int) int {
+		if col >= 0 && col < totalColumns {
+			return len(columns[col])
 		}
 		return 0
 	}
 
-	// Track if selection changed for syncing detail panel
 	selectionChanged := false
 
 	switch {
 	case key.Matches(msg, m.keys.PrevView): // h/left - move to previous column
 		if m.boardColumn > 0 {
 			m.boardColumn--
-			// Clamp row to new column's bounds
-			newCount := currentColumnCount()
+			newCount := columnCount(m.boardColumn)
 			if m.boardRow >= newCount {
 				m.boardRow = newCount - 1
 			}
 			if m.boardRow < 0 {
 				m.boardRow = 0
 			}
+			m.ensureBoardColumnVisible()
 			selectionChanged = true
 		}
 
 	case key.Matches(msg, m.keys.NextView): // l/right - move to next column
-		if m.boardColumn < 3 {
+		if m.boardColumn < totalColumns-1 {
 			m.boardColumn++
-			// Clamp row to new column's bounds
-			newCount := currentColumnCount()
+			newCount := columnCount(m.boardColumn)
 			if m.boardRow >= newCount {
 				m.boardRow = newCount - 1
 			}
 			if m.boardRow < 0 {
 				m.boardRow = 0
 			}
+			m.ensureBoardColumnVisible()
 			selectionChanged = true
 		}
 
@@ -1084,7 +1043,7 @@ func (m *Model) handleBoardKeys(msg tea.KeyMsg) tea.Cmd {
 		}
 
 	case key.Matches(msg, m.keys.Down): // j/down - move down in column
-		count := currentColumnCount()
+		count := columnCount(m.boardColumn)
 		if m.boardRow < count-1 {
 			m.boardRow++
 			selectionChanged = true
@@ -1097,7 +1056,7 @@ func (m *Model) handleBoardKeys(msg tea.KeyMsg) tea.Cmd {
 		}
 
 	case key.Matches(msg, m.keys.Bottom): // G - go to bottom
-		count := currentColumnCount()
+		count := columnCount(m.boardColumn)
 		if count > 0 && m.boardRow != count-1 {
 			m.boardRow = count - 1
 			selectionChanged = true
@@ -1109,7 +1068,7 @@ func (m *Model) handleBoardKeys(msg tea.KeyMsg) tea.Cmd {
 			m.selected = task
 			m.comments = nil
 			m.updateDetailContent()
-			m.previousMode = ViewBoard // Remember we came from board
+			m.previousMode = ViewBoard
 			m.mode = ViewDetail
 			return m.loadComments(task.ID)
 		}
@@ -1124,12 +1083,38 @@ func (m *Model) handleBoardKeys(msg tea.KeyMsg) tea.Cmd {
 		m.mode = ViewList
 	}
 
-	// Sync selected task with detail panel after navigation
 	if selectionChanged {
 		m.selected = m.getBoardSelectedTask()
 	}
 
 	return nil
+}
+
+// ensureBoardColumnVisible adjusts boardColumnOffset so the focused column is visible
+func (m *Model) ensureBoardColumnVisible() {
+	const totalColumns = 5
+	const minColWidth = 30
+
+	visibleCols := m.width / minColWidth
+	if visibleCols > totalColumns {
+		visibleCols = totalColumns
+	}
+	if visibleCols < 1 {
+		visibleCols = 1
+	}
+
+	if m.boardColumn < m.boardColumnOffset {
+		m.boardColumnOffset = m.boardColumn
+	}
+	if m.boardColumn >= m.boardColumnOffset+visibleCols {
+		m.boardColumnOffset = m.boardColumn - visibleCols + 1
+	}
+	if m.boardColumnOffset < 0 {
+		m.boardColumnOffset = 0
+	}
+	if m.boardColumnOffset > totalColumns-visibleCols {
+		m.boardColumnOffset = totalColumns - visibleCols
+	}
 }
 
 func (m *Model) handleTextEditKeys(msg tea.KeyMsg) tea.Cmd {
