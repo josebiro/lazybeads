@@ -352,24 +352,85 @@ func (m *Model) handleBoardMouse(msg tea.MouseMsg) tea.Cmd {
 		}
 
 	case tea.MouseButtonWheelUp:
-		// Scroll the column under the mouse cursor
-		if actualColumn >= 0 && actualColumn < totalColumns {
-			// Focus the hovered column and scroll up
-			m.boardColumn = actualColumn
-			if m.boardRow > 0 {
-				m.boardRow--
+		if msg.Ctrl {
+			// Ctrl+WheelUp: scroll columns left
+			if m.boardColumn > 0 {
+				m.boardColumn--
+				colCount := getColumnCount(m.boardColumn)
+				if m.boardRow >= colCount {
+					m.boardRow = colCount - 1
+				}
+				if m.boardRow < 0 {
+					m.boardRow = 0
+				}
+				m.ensureBoardColumnVisible()
+				m.selected = m.getBoardSelectedTask()
 			}
-			m.selected = m.getBoardSelectedTask()
+		} else {
+			// Scroll the column under the mouse cursor
+			if actualColumn >= 0 && actualColumn < totalColumns {
+				m.boardColumn = actualColumn
+				if m.boardRow > 0 {
+					m.boardRow--
+				}
+				m.selected = m.getBoardSelectedTask()
+			}
 		}
 
 	case tea.MouseButtonWheelDown:
-		// Scroll the column under the mouse cursor
-		if actualColumn >= 0 && actualColumn < totalColumns {
-			m.boardColumn = actualColumn
-			columnCount := getColumnCount(actualColumn)
-			if m.boardRow < columnCount-1 {
-				m.boardRow++
+		if msg.Ctrl {
+			// Ctrl+WheelDown: scroll columns right
+			if m.boardColumn < totalColumns-1 {
+				m.boardColumn++
+				colCount := getColumnCount(m.boardColumn)
+				if m.boardRow >= colCount {
+					m.boardRow = colCount - 1
+				}
+				if m.boardRow < 0 {
+					m.boardRow = 0
+				}
+				m.ensureBoardColumnVisible()
+				m.selected = m.getBoardSelectedTask()
 			}
+		} else {
+			// Scroll the column under the mouse cursor
+			if actualColumn >= 0 && actualColumn < totalColumns {
+				m.boardColumn = actualColumn
+				columnCount := getColumnCount(actualColumn)
+				if m.boardRow < columnCount-1 {
+					m.boardRow++
+				}
+				m.selected = m.getBoardSelectedTask()
+			}
+		}
+
+	case tea.MouseButtonWheelLeft:
+		// Native horizontal scroll (if terminal supports it)
+		if m.boardColumn > 0 {
+			m.boardColumn--
+			colCount := getColumnCount(m.boardColumn)
+			if m.boardRow >= colCount {
+				m.boardRow = colCount - 1
+			}
+			if m.boardRow < 0 {
+				m.boardRow = 0
+			}
+			m.ensureBoardColumnVisible()
+			m.selected = m.getBoardSelectedTask()
+		}
+
+	case tea.MouseButtonWheelRight:
+		// Native horizontal scroll (if terminal supports it)
+		if m.boardColumn < totalColumns-1 {
+			m.boardColumn++
+			colCount := getColumnCount(m.boardColumn)
+			if m.boardRow >= colCount {
+				m.boardRow = colCount - 1
+			}
+			if m.boardRow < 0 {
+				m.boardRow = 0
+			}
+			m.ensureBoardColumnVisible()
 			m.selected = m.getBoardSelectedTask()
 		}
 	}
