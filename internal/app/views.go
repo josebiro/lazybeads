@@ -364,8 +364,14 @@ func (m *Model) updateDetailContent() {
 	b.WriteString(ui.DetailValueStyle.Render(t.ID))
 	b.WriteString("\n")
 
-	b.WriteString(ui.DetailLabelStyle.Render("Title:"))
-	b.WriteString(ui.DetailValueStyle.Render(t.Title))
+	titleWidth := m.detail.Width - 12 // 12 = label width
+	if titleWidth < 20 {
+		titleWidth = 20
+	}
+	b.WriteString(lipgloss.JoinHorizontal(lipgloss.Top,
+		ui.DetailLabelStyle.Render("Title:"),
+		ui.DetailValueStyle.Width(titleWidth).Render(t.Title),
+	))
 	b.WriteString("\n")
 
 	b.WriteString(ui.DetailLabelStyle.Render("Status:"))
