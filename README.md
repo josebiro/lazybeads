@@ -6,7 +6,7 @@ Navigate, create, and manage your project issues without leaving the terminal.
 
 Originally forked from [LazyBeads](https://github.com/codegangsta/lazybeads) by [Jeremy Saenz](https://github.com/codegangsta). BusyBeads has since diverged significantly with hierarchical tree views, board view, dependency management, and other features.
 
-<img width="1405" height="814" alt="Screenshot 2026-02-17 120848" src="https://github.com/user-attachments/assets/b178a93e-5444-4c75-8088-4df9e3030df6" />
+<img width="1405" height="814" alt="Screenshot 2026-02-17 120848" src="https://github.com/user-attachments/assets/90dcf4c2-e413-4a48-b8bf-5cf9b4d633eb" />
 
 <img width="1404" height="808" alt="Screenshot 2026-02-17 120908" src="https://github.com/user-attachments/assets/f8ab222d-adc9-4aa1-bca8-515c5cbef2a4" />
 
