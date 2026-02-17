@@ -6,8 +6,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/josebiro/lazybeads/internal/models"
-	"github.com/josebiro/lazybeads/internal/ui"
+	"github.com/josebiro/bb/internal/models"
+	"github.com/josebiro/bb/internal/ui"
 )
 
 // View renders the application
@@ -110,8 +110,8 @@ func (m Model) viewDetailOverlay() string {
 	}
 
 	// Resize viewport for overlay mode
-	m.detail.Width = m.width - 6  // Account for border padding
-	m.detail.Height = contentHeight - 2  // Account for OverlayStyle border
+	m.detail.Width = m.width - 6        // Account for border padding
+	m.detail.Height = contentHeight - 2 // Account for OverlayStyle border
 
 	title := ui.TitleStyle.Render("Task Details")
 	b.WriteString(title + "\n\n")

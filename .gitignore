@@ -2,7 +2,8 @@
 .bv/
 
 # Binary
-lazybeads
+bb
+bin/
 
 # IDE
 .idea/

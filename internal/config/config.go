@@ -51,11 +51,11 @@ func Load() (*Config, error) {
 
 // ConfigPath returns the config file path to use.
 // It checks in order:
-//  1. LAZYBEADS_CONFIG environment variable (direct path to config file)
-//  2. Default XDG config location (~/.config/lazybeads/config.yml)
+//  1. BB_CONFIG environment variable (direct path to config file)
+//  2. Default XDG config location (~/.config/bb/config.yml)
 func ConfigPath() string {
 	// First, check for explicit config file path
-	if configFile := os.Getenv("LAZYBEADS_CONFIG"); configFile != "" {
+	if configFile := os.Getenv("BB_CONFIG"); configFile != "" {
 		return configFile
 	}
 
@@ -66,10 +66,10 @@ func ConfigPath() string {
 func DefaultConfigPath() string {
 	// Check XDG_CONFIG_HOME first
 	if xdgConfig := os.Getenv("XDG_CONFIG_HOME"); xdgConfig != "" {
-		return filepath.Join(xdgConfig, "lazybeads", "config.yml")
+		return filepath.Join(xdgConfig, "bb", "config.yml")
 	}
 
 	// Always use ~/.config for CLI tools (cross-platform convention)
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".config", "lazybeads", "config.yml")
+	return filepath.Join(home, ".config", "bb", "config.yml")
 }

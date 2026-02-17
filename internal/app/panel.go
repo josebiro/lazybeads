@@ -10,8 +10,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/josebiro/lazybeads/internal/models"
-	"github.com/josebiro/lazybeads/internal/ui"
+	"github.com/josebiro/bb/internal/models"
+	"github.com/josebiro/bb/internal/ui"
 )
 
 // PanelModel represents a single panel showing a filtered list of tasks
@@ -48,6 +48,26 @@ func (d panelDelegate) Render(w io.Writer, m list.Model, index int, item list.It
 	isSelected := index == m.Index()
 	focused := d.focused
 
+	// Tree indentation (cap at depth 5 to preserve readability)
+	displayDepth := t.depth
+	if displayDepth > 5 {
+		displayDepth = 5
+	}
+	indent := strings.Repeat("  ", displayDepth)
+
+	// Tree indicator: ▼ expanded, ▸ collapsed, spaces for leaves
+	var treeIndicator string
+	if t.hasChildren {
+		if t.expanded {
+			treeIndicator = "▼ "
+		} else {
+			treeIndicator = "▸ "
+		}
+	} else if displayDepth > 0 {
+		// Child leaf items: align with siblings that may have indicators
+		treeIndicator = "  "
+	}
+
 	// Blocked indicator
 	blockedIndicator := ""
 	if t.task.IsBlocked() {
@@ -63,13 +83,14 @@ func (d panelDelegate) Render(w io.Writer, m list.Model, index int, item list.It
 		width = 40
 	}
 
-	// Calculate available width for title (account for blocked indicator, priority, issue ID, spaces)
-	// Format: " ⊘ P# issue-id title" or " P# issue-id title"
+	// Calculate available width for title
+	// Format: indent + treeIndicator + [blocked] + priority + issueID + title
+	treePrefix := indent + treeIndicator
 	var prefixWidth int
 	if blockedIndicator != "" {
-		prefixWidth = lipgloss.Width(fmt.Sprintf(" %s %s %s ", blockedIndicator, priority, issueID))
+		prefixWidth = lipgloss.Width(fmt.Sprintf("%s %s %s %s ", treePrefix, blockedIndicator, priority, issueID))
 	} else {
-		prefixWidth = lipgloss.Width(fmt.Sprintf(" %s %s ", priority, issueID))
+		prefixWidth = lipgloss.Width(fmt.Sprintf("%s %s %s ", treePrefix, priority, issueID))
 	}
 	maxTitleWidth := width - prefixWidth
 	if maxTitleWidth < 5 {
@@ -78,7 +99,6 @@ func (d panelDelegate) Render(w io.Writer, m list.Model, index int, item list.It
 
 	// Truncate title if too long
 	if lipgloss.Width(title) > maxTitleWidth {
-		// Truncate with ellipsis
 		for lipgloss.Width(title+"...") > maxTitleWidth && len(title) > 0 {
 			title = title[:len(title)-1]
 		}
@@ -89,9 +109,9 @@ func (d panelDelegate) Render(w io.Writer, m list.Model, index int, item list.It
 		// Show highlight only when panel is focused
 		var line string
 		if blockedIndicator != "" {
-			line = fmt.Sprintf(" %s %s %s %s", blockedIndicator, priority, issueID, title)
+			line = fmt.Sprintf("%s %s %s %s %s", treePrefix, blockedIndicator, priority, issueID, title)
 		} else {
-			line = fmt.Sprintf(" %s %s %s", priority, issueID, title)
+			line = fmt.Sprintf("%s %s %s %s", treePrefix, priority, issueID, title)
 		}
 		style := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("15")).
@@ -103,16 +123,19 @@ func (d panelDelegate) Render(w io.Writer, m list.Model, index int, item list.It
 		priorityStyle := ui.PriorityStyle(t.task.Priority)
 		idStyle := lipgloss.NewStyle().Foreground(ui.ColorMuted)
 		blockedStyle := lipgloss.NewStyle().Foreground(ui.ColorDanger)
+		treeStyle := lipgloss.NewStyle().Foreground(ui.ColorMuted)
 
 		var line string
 		if blockedIndicator != "" {
-			line = fmt.Sprintf(" %s %s %s %s",
+			line = fmt.Sprintf("%s %s %s %s %s",
+				treeStyle.Render(treePrefix),
 				blockedStyle.Render(blockedIndicator),
 				priorityStyle.Render(priority),
 				idStyle.Render(issueID),
 				title)
 		} else {
-			line = fmt.Sprintf(" %s %s %s",
+			line = fmt.Sprintf("%s %s %s %s",
+				treeStyle.Render(treePrefix),
 				priorityStyle.Render(priority),
 				idStyle.Render(issueID),
 				title)
@@ -142,7 +165,7 @@ func NewPanel(title string) PanelModel {
 	}
 }
 
-// SetTasks updates the panel's task list
+// SetTasks updates the panel's task list (flat, no tree metadata)
 func (p *PanelModel) SetTasks(tasks []models.Task) {
 	p.tasks = tasks
 	items := make([]list.Item, len(tasks))
@@ -150,6 +173,17 @@ func (p *PanelModel) SetTasks(tasks []models.Task) {
 		items[i] = taskItem{task: t}
 	}
 	p.list.SetItems(items)
+}
+
+// SetTreeItems updates the panel with pre-flattened tree items
+func (p *PanelModel) SetTreeItems(items []taskItem) {
+	p.tasks = make([]models.Task, len(items))
+	listItems := make([]list.Item, len(items))
+	for i, item := range items {
+		p.tasks[i] = item.task
+		listItems[i] = item
+	}
+	p.list.SetItems(listItems)
 }
 
 // SetSize updates the panel dimensions

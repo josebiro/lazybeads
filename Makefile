@@ -2,6 +2,8 @@
 
 all: build install
 
+BIN=bb
+
 build:
 	go build .
 
@@ -9,11 +11,11 @@ install:
 	go install .
 
 check: build
-	./lazybeads --check
+	./bin/$(BIN) --check
 
 vet:
 	go vet ./...
 
 clean:
 	go clean
-	rm -f lazybeads
+	rm -f bin/$(BIN)

@@ -9,9 +9,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/josebiro/lazybeads/internal/app"
-	"github.com/josebiro/lazybeads/internal/beads"
-	"github.com/josebiro/lazybeads/internal/config"
+	"github.com/josebiro/bb/internal/app"
+	"github.com/josebiro/bb/internal/beads"
+	"github.com/josebiro/bb/internal/config"
 )
 
 func main() {
@@ -67,14 +67,14 @@ func main() {
 	)
 
 	if _, err := p.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error running lazybeads: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error running bb: %v\n", err)
 		os.Exit(1)
 	}
 }
 
 // runCheck performs headless validation of the beads client
 func runCheck(client *beads.Client) {
-	fmt.Println("Running lazybeads validation...")
+	fmt.Println("Running bb validation...")
 	fmt.Println()
 
 	failed := false
@@ -112,7 +112,7 @@ func runCheck(client *beads.Client) {
 	// Test 4: Create task
 	fmt.Print("  Create task: ")
 	task, err := client.Create(beads.CreateOptions{
-		Title:    "__lazybeads_check_task__",
+		Title:    "__bb_check_task__",
 		Type:     "task",
 		Priority: 4,
 	})
@@ -180,12 +180,12 @@ func runCheck(client *beads.Client) {
 func showConfigStatus() {
 	fmt.Println("Config Status")
 
-	// Show LAZYBEADS_CONFIG env var
-	envValue := os.Getenv("LAZYBEADS_CONFIG")
+	// Show BB_CONFIG env var
+	envValue := os.Getenv("BB_CONFIG")
 	if envValue == "" {
-		fmt.Println("  LAZYBEADS_CONFIG: (not set)")
+		fmt.Println("  BB_CONFIG: (not set)")
 	} else {
-		fmt.Printf("  LAZYBEADS_CONFIG: %s\n", envValue)
+		fmt.Printf("  BB_CONFIG: %s\n", envValue)
 	}
 
 	// Show resolved config path

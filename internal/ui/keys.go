@@ -43,6 +43,9 @@ type KeyMap struct {
 	// Sorting
 	Sort key.Binding
 
+	// Tree
+	ToggleExpand key.Binding
+
 	// Views
 	Board key.Binding
 
@@ -181,6 +184,12 @@ func DefaultKeyMap() KeyMap {
 		Sort: key.NewBinding(
 			key.WithKeys("S"),
 			key.WithHelp("S", "cycle sort"),
+		),
+
+		// Tree
+		ToggleExpand: key.NewBinding(
+			key.WithKeys(" "),
+			key.WithHelp("space", "expand/collapse"),
 		),
 
 		// Views

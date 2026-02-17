@@ -11,10 +11,10 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/josebiro/lazybeads/internal/beads"
-	"github.com/josebiro/lazybeads/internal/config"
-	"github.com/josebiro/lazybeads/internal/models"
-	"github.com/josebiro/lazybeads/internal/ui"
+	"github.com/josebiro/bb/internal/beads"
+	"github.com/josebiro/bb/internal/config"
+	"github.com/josebiro/bb/internal/models"
+	"github.com/josebiro/bb/internal/ui"
 )
 
 // ViewMode represents the current view
@@ -78,11 +78,11 @@ func (f FilterMode) String() string {
 type SortMode int
 
 const (
-	SortDefault    SortMode = iota // Priority then updated
-	SortCreatedAsc                 // Oldest first
-	SortCreatedDesc                // Newest first
-	SortPriority                   // Priority only
-	SortUpdated                    // Most recently updated first
+	SortDefault     SortMode = iota // Priority then updated
+	SortCreatedAsc                  // Oldest first
+	SortCreatedDesc                 // Newest first
+	SortPriority                    // Priority only
+	SortUpdated                     // Most recently updated first
 	sortModeCount
 )
 
@@ -104,9 +104,12 @@ func (s SortMode) String() string {
 	}
 }
 
-// taskItem wraps a Task for the list component
+// taskItem wraps a Task for the list component with tree metadata
 type taskItem struct {
-	task models.Task
+	task        models.Task
+	depth       int  // 0=root, 1=child, 2=grandchild
+	hasChildren bool // has visible children in this panel
+	expanded    bool // current expanded state (true = children shown)
 }
 
 func (t taskItem) Title() string {
@@ -130,6 +133,7 @@ type Model struct {
 	// Data
 	tasks    []models.Task
 	selected *models.Task
+	loading  bool // true while a loadTasks() command is in-flight
 
 	// UI state
 	mode         ViewMode
@@ -167,19 +171,19 @@ type Model struct {
 
 	// Filter state
 	filterQuery string
-	filterMode  FilterMode       // quick filter mode (All/Open/Closed/Ready)
-	searchMode  bool             // true when inline search is active
-	searchInput textinput.Model  // text input for inline search in status bar
+	filterMode  FilterMode      // quick filter mode (All/Open/Closed/Ready)
+	searchMode  bool            // true when inline search is active
+	searchInput textinput.Model // text input for inline search in status bar
 
 	// Sort mode
 	sortMode SortMode
 
 	// Board view state
-	boardColumn       int            // 0=Blocked, 1=Open, 2=Ready, 3=In Progress, 4=Done
-	boardRow          int            // Selected row within the column
-	boardColumnOffset int            // Leftmost visible column index (for horizontal scroll)
+	boardColumn       int             // 0=Blocked, 1=Open, 2=Ready, 3=In Progress, 4=Done
+	boardRow          int             // Selected row within the column
+	boardColumnOffset int             // Leftmost visible column index (for horizontal scroll)
 	readyIDs          map[string]bool // Task IDs from bd ready (for board column categorization)
-	previousMode      ViewMode       // Track where user came from (for returning from detail view)
+	previousMode      ViewMode        // Track where user came from (for returning from detail view)
 
 	// Double-click detection for board view
 	lastClickTime   time.Time // Time of last click
@@ -201,6 +205,10 @@ type Model struct {
 
 	// Custom commands from config
 	customCommands []config.CustomCommand
+
+	// Tree view state: tracks which nodes are collapsed.
+	// Default is expanded (absent = expanded, present+true = collapsed).
+	collapsedNodes map[string]bool
 }
 
 // New creates a new application model
@@ -280,6 +288,7 @@ func New() Model {
 		formType:        "feature",
 		commentInput:    commentInput,
 		customCommands:  customCmds,
+		collapsedNodes: make(map[string]bool),
 	}
 }
 
@@ -297,6 +306,7 @@ func buildCustomCommandBindings(cmds []config.CustomCommand) []key.Binding {
 
 // Init initializes the application
 func (m Model) Init() tea.Cmd {
+	m.loading = true
 	return tea.Batch(m.loadTasks(), pollTick())
 }
 
@@ -375,9 +385,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tasksLoadedMsg:
+		m.loading = false
 		if msg.err != nil {
 			m.err = msg.err
 		} else {
+			m.err = nil
 			m.tasks = msg.tasks
 			m.readyIDs = msg.readyIDs
 			m.distributeTasks()
@@ -388,32 +400,49 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = msg.err
 		} else {
 			m.mode = ViewList
-			cmds = append(cmds, m.loadTasks())
+			if !m.loading {
+				m.loading = true
+				cmds = append(cmds, m.loadTasks())
+			}
 		}
 
 	case taskUpdatedMsg:
 		if msg.err != nil {
 			m.err = msg.err
 		}
-		cmds = append(cmds, m.loadTasks())
+		if !m.loading {
+			m.loading = true
+			cmds = append(cmds, m.loadTasks())
+		}
 
 	case taskClosedMsg:
 		if msg.err != nil {
 			m.err = msg.err
 		}
 		m.mode = ViewList
-		cmds = append(cmds, m.loadTasks())
+		if !m.loading {
+			m.loading = true
+			cmds = append(cmds, m.loadTasks())
+		}
 
 	case taskDeletedMsg:
 		if msg.err != nil {
 			m.err = msg.err
 		}
 		m.mode = ViewList
-		cmds = append(cmds, m.loadTasks())
+		if !m.loading {
+			m.loading = true
+			cmds = append(cmds, m.loadTasks())
+		}
 
 	case tickMsg:
-		// Periodic refresh - reload tasks and schedule next tick
-		cmds = append(cmds, m.loadTasks(), pollTick())
+		// Periodic refresh - skip if a load is already in-flight to avoid
+		// concurrent bd processes contending on the Dolt database lock
+		if !m.loading {
+			m.loading = true
+			cmds = append(cmds, m.loadTasks())
+		}
+		cmds = append(cmds, pollTick())
 
 	case commentsLoadedMsg:
 		if msg.err != nil {
@@ -459,7 +488,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}))
 		}
 		m.mode = ViewList
-		cmds = append(cmds, m.loadTasks())
+		if !m.loading {
+			m.loading = true
+			cmds = append(cmds, m.loadTasks())
+		}
 
 	case blockerRemovedMsg:
 		if msg.err != nil {
@@ -471,7 +503,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}))
 		}
 		m.mode = ViewList
-		cmds = append(cmds, m.loadTasks())
+		if !m.loading {
+			m.loading = true
+			cmds = append(cmds, m.loadTasks())
+		}
 
 	case clearStatusMsg:
 		m.statusMsg = ""
@@ -726,26 +761,24 @@ func (m *Model) distributeTasks() {
 		}
 	}
 
-	sortTasks(inProgress)
-	sortTasks(open)
+	sortClosedTasks := func(tasks []models.Task) {
+		sort.Slice(tasks, func(i, j int) bool {
+			if tasks[i].ClosedAt == nil && tasks[j].ClosedAt == nil {
+				return false
+			}
+			if tasks[i].ClosedAt == nil {
+				return false
+			}
+			if tasks[j].ClosedAt == nil {
+				return true
+			}
+			return tasks[i].ClosedAt.After(*tasks[j].ClosedAt)
+		})
+	}
 
-	// Sort closed tasks by ClosedAt (most recently closed first) - always
-	sort.Slice(closed, func(i, j int) bool {
-		if closed[i].ClosedAt == nil && closed[j].ClosedAt == nil {
-			return false
-		}
-		if closed[i].ClosedAt == nil {
-			return false
-		}
-		if closed[j].ClosedAt == nil {
-			return true
-		}
-		return closed[i].ClosedAt.After(*closed[j].ClosedAt)
-	})
-
-	m.inProgressPanel.SetTasks(inProgress)
-	m.openPanel.SetTasks(open)
-	m.closedPanel.SetTasks(closed)
+	m.inProgressPanel.SetTreeItems(m.flattenTree(inProgress, sortTasks))
+	m.openPanel.SetTreeItems(m.flattenTree(open, sortTasks))
+	m.closedPanel.SetTreeItems(m.flattenTree(closed, sortClosedTasks))
 
 	// If In Progress panel disappears while focused, move focus to Open panel
 	if m.focusedPanel == FocusInProgress && len(inProgress) == 0 {
@@ -769,6 +802,76 @@ func (m *Model) getSelectedTask() *models.Task {
 		return m.closedPanel.SelectedTask()
 	}
 	return nil
+}
+
+// flattenTree converts a flat task list into a tree-ordered list of taskItems
+// with depth, hasChildren, and expanded metadata. The sortFn is applied to
+// sibling groups at each level.
+func (m *Model) flattenTree(tasks []models.Task, sortFn func([]models.Task)) []taskItem {
+	// Build lookup: which tasks exist in this set
+	taskByID := make(map[string]bool, len(tasks))
+	for _, t := range tasks {
+		taskByID[t.ID] = true
+	}
+
+	// Group tasks by parent. Key "" = roots (no parent in this set).
+	childrenOf := make(map[string][]models.Task)
+	for _, t := range tasks {
+		parentID := models.ParentID(t.ID)
+		if parentID != "" && taskByID[parentID] {
+			childrenOf[parentID] = append(childrenOf[parentID], t)
+		} else {
+			childrenOf[""] = append(childrenOf[""], t)
+		}
+	}
+
+	// Sort each sibling group
+	for key := range childrenOf {
+		sortFn(childrenOf[key])
+	}
+
+	// DFS walk to produce flattened, ordered output
+	var result []taskItem
+	var walk func(parentKey string, depth int)
+	walk = func(parentKey string, depth int) {
+		for _, t := range childrenOf[parentKey] {
+			hasChildren := len(childrenOf[t.ID]) > 0
+			collapsed := m.collapsedNodes[t.ID]
+			result = append(result, taskItem{
+				task:        t,
+				depth:       depth,
+				hasChildren: hasChildren,
+				expanded:    hasChildren && !collapsed,
+			})
+			if hasChildren && !collapsed {
+				walk(t.ID, depth+1)
+			}
+		}
+	}
+	walk("", 0)
+
+	return result
+}
+
+// selectTaskByID finds and selects a task by ID in the focused panel
+func (m *Model) selectTaskByID(id string) {
+	var panel *PanelModel
+	switch m.focusedPanel {
+	case FocusInProgress:
+		panel = &m.inProgressPanel
+	case FocusOpen:
+		panel = &m.openPanel
+	case FocusClosed:
+		panel = &m.closedPanel
+	default:
+		return
+	}
+	for i, t := range panel.tasks {
+		if t.ID == id {
+			panel.SelectIndex(i)
+			return
+		}
+	}
 }
 
 // getBoardSelectedTask returns the currently selected task in board view

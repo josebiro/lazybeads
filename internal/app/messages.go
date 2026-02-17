@@ -5,10 +5,10 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/josebiro/lazybeads/internal/models"
+	"github.com/josebiro/bb/internal/models"
 )
 
-const pollInterval = 2 * time.Second
+const pollInterval = 5 * time.Second
 const statusFlashDuration = 1 * time.Second
 
 // tasksLoadedMsg is sent when tasks are loaded

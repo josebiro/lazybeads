@@ -1,8 +1,8 @@
-# LazyBeads
+# BusyBeads (aka bb)
 
-A terminal user interface for managing [beads](https://github.com/anthropics/beads) issues, inspired by [LazyGit](https://github.com/jesseduffield/lazygit).
+A terminal user interface for managing [beads](https://github.com/anthropics/beads) issues, inspired by [LazyGit](https://github.com/jesseduffield/lazygit), this was originally a fork of [LazyBeads](https://github.com/codegangsta/lazybeads).
 
-Navigate, create, and manage your project issues without leaving the terminal.
+Navigate, create, and manage your project issues without leaving the terminal. Heavily uses charmbracelet libraries for a responsive and intuitive experience.
 
 <img width="2550" height="1362" alt="CleanShot 2026-01-07 at 18 17 53@2x" src="https://github.com/user-attachments/assets/2b6fdc40-4595-41f3-9a73-e3eb9de00cfc" />
 
@@ -10,7 +10,10 @@ Navigate, create, and manage your project issues without leaving the terminal.
 ## Features
 
 - **Three-panel layout** - See In Progress, Open, and Closed issues at a glance
+- **Hierarchical issues** - Expand epics to view child tasks and subtasks
+- **Board view** - Visualize issue status kanban-style with color-coded priorities
 - **Vim-style navigation** - `j/k` to move, `h/l` to switch panels
+- **Mouse support** - Click to select, open details, or trigger actions
 - **Quick editing** - Edit title, status, priority, or type with single keystrokes
 - **Filter & search** - Use `/` to filter issues by title or ID
 - **Detail view** - Press `Enter` to see full issue details

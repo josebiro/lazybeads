@@ -12,10 +12,10 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/josebiro/lazybeads/internal/beads"
-	"github.com/josebiro/lazybeads/internal/config"
-	"github.com/josebiro/lazybeads/internal/models"
-	"github.com/josebiro/lazybeads/internal/ui"
+	"github.com/josebiro/bb/internal/beads"
+	"github.com/josebiro/bb/internal/config"
+	"github.com/josebiro/bb/internal/models"
+	"github.com/josebiro/bb/internal/ui"
 )
 
 // handleMouseEvent handles all mouse events
@@ -60,6 +60,28 @@ func (m *Model) handleListMouse(msg tea.MouseMsg) tea.Cmd {
 					itemIndex := msg.Y - bounds.top - 1 // -1 for top border
 					if itemIndex >= 0 {
 						m.selectItemInPanel(panel, itemIndex)
+
+						// Check if click was on the tree expand/collapse indicator
+						if task := m.getSelectedTask(); task != nil {
+							depth := models.Depth(task.ID)
+							if depth > 5 {
+								depth = 5
+							}
+							// Indicator position: border(1) + padding(1) + indent(2*depth) = start of indicator
+							indicatorStart := bounds.left + 2 + (depth * 2)
+							indicatorEnd := indicatorStart + 2
+							if msg.X >= indicatorStart && msg.X < indicatorEnd {
+								if m.collapsedNodes[task.ID] {
+									delete(m.collapsedNodes, task.ID)
+								} else {
+									m.collapsedNodes[task.ID] = true
+								}
+								currentID := task.ID
+								m.distributeTasks()
+								m.selectTaskByID(currentID)
+								m.selected = m.getSelectedTask()
+							}
+						}
 					}
 					break
 				}
@@ -546,6 +568,20 @@ func (m *Model) handleListKeys(msg tea.KeyMsg) tea.Cmd {
 			return m.loadComments(task.ID)
 		}
 
+	case key.Matches(msg, m.keys.ToggleExpand):
+		if task := m.getSelectedTask(); task != nil {
+			// Toggle collapsed state for this node
+			if m.collapsedNodes[task.ID] {
+				delete(m.collapsedNodes, task.ID)
+			} else {
+				m.collapsedNodes[task.ID] = true
+			}
+			currentID := task.ID
+			m.distributeTasks()
+			m.selectTaskByID(currentID)
+			m.selected = m.getSelectedTask()
+		}
+
 	case key.Matches(msg, m.keys.Add):
 		m.resetForm()
 		m.editing = false
@@ -572,7 +608,10 @@ func (m *Model) handleListKeys(msg tea.KeyMsg) tea.Cmd {
 		m.cyclePanelFocus(1)
 
 	case key.Matches(msg, m.keys.Refresh):
-		return m.loadTasks()
+		if !m.loading {
+			m.loading = true
+			return m.loadTasks()
+		}
 
 	case key.Matches(msg, m.keys.Help):
 		m.mode = ViewHelp

@@ -6,7 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/josebiro/lazybeads/internal/beads"
+	"github.com/josebiro/bb/internal/beads"
 )
 
 func (m *Model) updateForm(msg tea.Msg) tea.Cmd {
