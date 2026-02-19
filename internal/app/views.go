@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -509,6 +510,40 @@ func (m *Model) updateDetailContent() {
 				b.WriteString("  - " + id + "\n")
 			}
 		}
+	}
+
+	// Parent/Children hierarchy
+	b.WriteString("\n")
+	parentID := models.ParentID(t.ID)
+	b.WriteString(ui.DetailLabelStyle.Render("Parent:"))
+	if parentID != "" {
+		if parent, ok := m.tasksMap[parentID]; ok {
+			priority := ui.PriorityStyle(parent.Priority).Render(parent.PriorityString())
+			idStyled := ui.HelpDescStyle.Render(parentID)
+			status := ui.StatusStyle(parent.Status).Render("[" + parent.Status + "]")
+			b.WriteString(fmt.Sprintf(" %s %s %s %s", priority, idStyled, parent.Title, status))
+		} else {
+			b.WriteString(ui.DetailValueStyle.Render(parentID))
+		}
+	}
+	b.WriteString("\n")
+
+	b.WriteString(ui.DetailLabelStyle.Render("Children:"))
+	b.WriteString("\n")
+	var children []*models.Task
+	for id, task := range m.tasksMap {
+		if models.IsDirectChildOf(id, t.ID) {
+			children = append(children, task)
+		}
+	}
+	sort.Slice(children, func(i, j int) bool {
+		return children[i].ID < children[j].ID
+	})
+	for _, child := range children {
+		priority := ui.PriorityStyle(child.Priority).Render(child.PriorityString())
+		idStyled := ui.HelpDescStyle.Render(child.ID)
+		status := ui.StatusStyle(child.Status).Render("[" + child.Status + "]")
+		b.WriteString(fmt.Sprintf("  %s %s %s %s\n", priority, idStyled, child.Title, status))
 	}
 
 	// Timestamps section
